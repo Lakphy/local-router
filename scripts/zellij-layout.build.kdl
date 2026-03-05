@@ -1,0 +1,41 @@
+// Zellij layout for local-router build
+// Usage: bun run build
+// 快捷操作: Ctrl+b q=退出 | Ctrl+b x=关面板 | Ctrl+b d=分离 | Alt+1/2=切换Tab
+
+layout {
+    default_tab_template {
+        children
+        pane size=1 borderless=true {
+            plugin location="zellij:compact-bar"
+        }
+    }
+
+    // Tab 1: 构建主面板 - web 和 api 并排
+    tab name="build" split_direction="vertical" {
+        pane split_direction="horizontal" {
+            pane {
+                name "Build Web (web/dist/)"
+                command "sh"
+                args "-c" "echo 'Build Web...'; cd web && bun run build; echo 'Done'; exec bash"
+            }
+        }
+        pane split_direction="horizontal" {
+            pane {
+                name "Build API (dist/)"
+                command "sh"
+                args "-c" "echo 'Build API...'; bun build src/index.ts --target bun --outdir dist; echo 'Done'; exec bash"
+            }
+        }
+    }
+
+    // Tab 2: 文件浏览
+    tab name="files" {
+        pane split_direction="horizontal" {
+            pane {
+                name "Output Files"
+                command "sh"
+                args "-c" "echo 'Output files:'; ls dist/ 2>/dev/null || echo 'API: none'; ls web/dist/ 2>/dev/null || echo 'Web: none'; exec bash"
+            }
+        }
+    }
+}

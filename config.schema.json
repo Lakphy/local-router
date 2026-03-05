@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "./config.schema.json",
+  "title": "Local Router Config",
+  "description": "local-router 的主配置文件。用于把不同协议入口的请求路由到具体 provider，并定义 provider 的模型能力与鉴权信息。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["routes", "providers"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "可选。指向本文件的 schema 路径，便于编辑器提供自动补全与静态校验。",
+      "examples": ["./config.schema.json", "https://example.com/config.schema.json"]
+    },
+    "routes": {
+      "description": "路由映射：按入口协议分组，再按模型别名（或 * 通配）映射到目标 provider 与目标模型。",
+      "markdownDescription": "路由映射：按入口协议分组，再按模型别名（或 `*` 通配）映射到目标 provider 与目标模型。\n\n- 第一层 key：协议入口（例如 `openai-completions`、`openai-responses`、`anthropic-messages`）\n- 第二层 key：模型匹配规则（如 `opus`、`sonnet`、`*`）\n- value：`{ provider, model }`，表示最终转发到哪个 provider、使用哪个上游模型",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$",
+        "description": "协议入口名称，建议使用 kebab-case。"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/routeModelMap"
+      },
+      "examples": [
+        {
+          "openai-completions": {
+            "*": {
+              "provider": "dashscope-openai-completions",
+              "model": "qwen3.5-plus"
+            }
+          },
+          "anthropic-messages": {
+            "opus": {
+              "provider": "dashscope-anthropic-messages",
+              "model": "qwen3.5-plus"
+            },
+            "*": {
+              "provider": "dashscope-anthropic-messages",
+              "model": "qwen3.5-plus"
+            }
+          }
+        }
+      ]
+    },
+    "providers": {
+      "description": "provider 定义集合。key 为 provider 名称，value 为 provider 的协议类型、基础地址、鉴权与模型能力。",
+      "markdownDescription": "provider 定义集合。`routes.*.*.provider` 应引用这里的某个 key。\n\n每个 provider 包含：\n- `type`：协议类型（决定路由层如何拼接上游地址）\n- `base`：上游 API 基础地址（不含末尾具体路径）\n- `apiKey`：访问上游的密钥\n- `models`：上游模型能力开关（如是否支持推理、图像输入）",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$",
+        "description": "provider 名称，建议使用 kebab-case，并在 routes 中通过该名称引用。"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/providerConfig"
+      }
+    },
+    "log": {
+      "$ref": "#/$defs/logConfig",
+      "description": "日志配置。省略此字段或不配置时，日志系统不会启用。配置后默认启用，可通过 enabled: false 暂停。",
+      "markdownDescription": "日志配置。省略此字段时日志系统不启用。\n\n配置后，日志会写入配置文件同目录下的 `logs/` 子目录（如 `~/.local-router/logs/`），包括：\n- `events/YYYY-MM-DD.jsonl`：按天分片的结构化事件日志\n- `streams/YYYY-MM-DD/<request_id>.sse.raw`：流式响应原始 SSE 文本"
+    }
+  },
+  "$defs": {
+    "routeModelMap": {
+      "type": "object",
+      "description": "某个协议入口下的模型匹配表。key 是模型别名（或 *），value 是路由目标。",
+      "minProperties": 1,
+      "required": ["*"],
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "description": "模型匹配键。可使用 * 作为兜底通配规则。"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/routeTarget"
+      },
+      "examples": [
+        {
+          "opus": {
+            "provider": "dashscope-anthropic-messages",
+            "model": "qwen3.5-plus"
+          },
+          "*": {
+            "provider": "dashscope-anthropic-messages",
+            "model": "qwen3.5-plus"
+          }
+        }
+      ]
+    },
+    "routeTarget": {
+      "type": "object",
+      "description": "路由命中后的转发目标。",
+      "additionalProperties": false,
+      "required": ["provider", "model"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "description": "目标 provider 名称，必须与 providers 下某个 key 一致（跨字段引用关系由运行时或额外校验保证）。",
+          "examples": ["dashscope-openai-completions", "dashscope-anthropic-messages"]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "转发到上游时写入请求体的模型名。",
+          "examples": ["qwen3.5-plus", "qwen3-max", "qwen3.5-flash"]
+        }
+      }
+    },
+    "providerConfig": {
+      "type": "object",
+      "description": "单个 provider 的配置。",
+      "additionalProperties": false,
+      "required": ["type", "base", "apiKey", "models"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["openai-completions", "openai-responses", "anthropic-messages"],
+          "description": "provider 协议类型。应与其服务的入口协议/接口形态一致。"
+        },
+        "base": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1,
+          "description": "上游 API 的基础 URL。建议不带末尾斜杠，避免路径拼接出现重复斜杠。",
+          "examples": [
+            "https://dashscope.aliyuncs.com/compatible-mode",
+            "https://dashscope.aliyuncs.com/response-mode",
+            "https://dashscope.aliyuncs.com/anthropic"
+          ]
+        },
+        "apiKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "访问上游服务的密钥。建议通过环境变量注入后再生成配置文件，避免在仓库中明文保存。"
+        },
+        "models": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "模型能力定义。key 为模型名，value 为该模型的能力标记（例如 reasoning、image-input）。",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "description": "模型标识，例如 qwen3.5-plus。"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/modelCapabilities"
+          }
+        }
+      }
+    },
+    "modelCapabilities": {
+      "type": "object",
+      "description": "模型能力开关。当前已知能力字段为 image-input 与 reasoning；未声明字段默认视为 false 或由上游默认行为决定。",
+      "additionalProperties": false,
+      "properties": {
+        "image-input": {
+          "type": "boolean",
+          "description": "是否支持图像输入能力。"
+        },
+        "reasoning": {
+          "type": "boolean",
+          "description": "是否支持推理/思维链类能力（按你的业务语义定义）。"
+        }
+      },
+      "examples": [
+        {
+          "image-input": false,
+          "reasoning": true
+        }
+      ]
+    },
+    "logConfig": {
+      "type": "object",
+      "description": "日志系统配置。控制请求/响应日志的记录方式、存储路径和隐私脱敏策略。",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否启用日志记录。设为 false 可在保留配置的同时暂停日志写入。默认为 true（配置了 log 段即启用）。"
+        },
+        "baseDir": {
+          "type": "string",
+          "description": "日志文件根目录的绝对路径。默认为 ~/.local-router/logs/。仅在需要自定义存储位置时指定。",
+          "examples": ["/home/user/.local-router/logs", "/var/log/local-router"]
+        },
+        "events": {
+          "$ref": "#/$defs/logEventsConfig",
+          "description": "事件日志（JSONL 格式）相关配置。"
+        },
+        "streams": {
+          "$ref": "#/$defs/logStreamsConfig",
+          "description": "流式响应原文（SSE raw）相关配置。"
+        },
+        "bodyPolicy": {
+          "type": "string",
+          "enum": ["off", "masked", "full"],
+          "default": "off",
+          "description": "请求体与响应体的记录策略。off：不记录 body 内容（推荐日常使用）；masked：脱敏后记录（当前版本行为同 full，后续将完善字段级脱敏）；full：完整记录所有内容（仅建议调试时临时开启，注意隐私风险）。",
+          "markdownDescription": "请求体与响应体的记录策略：\n- `off`：不记录 body 内容（推荐日常使用）\n- `masked`：脱敏后记录（当前版本行为同 `full`，后续完善）\n- `full`：完整记录所有内容（仅调试时使用）"
+        }
+      }
+    },
+    "logEventsConfig": {
+      "type": "object",
+      "description": "事件日志（JSONL 格式）相关配置。每个转发请求生成一条 JSON 事件，按天写入独立文件（如 events/2026-02-28.jsonl）。",
+      "additionalProperties": false,
+      "properties": {
+        "retainDays": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 14,
+          "description": "事件日志文件保留天数。超过此天数的 .jsonl 文件将在清理时被删除。默认保留 14 天。"
+        }
+      }
+    },
+    "logStreamsConfig": {
+      "type": "object",
+      "description": "流式响应原文（SSE raw）相关配置。每个流式请求的完整 SSE 文本会保存为独立的 .sse.raw 文件（如 streams/2026-02-28/<request_id>.sse.raw）。",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否记录流式响应的原始 SSE 文本到独立文件。关闭后仅在事件日志中记录元数据，不保存原始流内容。默认开启。"
+        },
+        "retainDays": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 7,
+          "description": "流式原文文件保留天数。超过此天数的 .sse.raw 文件将在清理时被删除。默认保留 7 天。"
+        },
+        "maxBytesPerRequest": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10485760,
+          "description": "单个流式请求最大记录字节数（默认约 10MB = 10485760 字节）。超出部分将被截断并在文件末尾追加 [TRUNCATED] 标记。设置合理上限可防止异常长响应撑爆磁盘。"
+        }
+      }
+    }
+  }
+}

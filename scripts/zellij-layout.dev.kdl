@@ -1,0 +1,49 @@
+// Zellij layout for local-router dev
+// Usage: bun run dev
+// 快捷操作: Ctrl+b q=退出 | Ctrl+b x=关面板 | Ctrl+b d=分离 | Alt+1/2/3=切换Tab
+
+layout {
+    default_tab_template {
+        children
+        pane size=1 borderless=true {
+            plugin location="zellij:compact-bar"
+        }
+    }
+
+    // Tab 1: API + Web 开发面板 (按 'r' 重启对应服务)
+    tab name="dev" split_direction="vertical" {
+        pane {
+            name "API Server"
+            command "sh"
+            args "-c" "echo '按 r 重启 API Server'; while true; do PORT=4099 ADMIN_DEV_SERVER_URL=http://localhost:5177 bun run --hot src/index.ts --config config.json5; echo ''; echo 'API Server 已停止，按 r 重启，按 Ctrl+C 退出'; read -n1 key; echo ''; if [ \"$key\" != 'r' ] && [ \"$key\" != 'R' ]; then break; fi; done"
+        }
+        pane {
+            name "Web DevServer"
+            cwd "web"
+            command "sh"
+            args "-c" "echo '按 r 重启 Web DevServer'; while true; do bun run dev; echo ''; echo 'Web DevServer 已停止，按 r 重启，按 Ctrl+C 退出'; read -n1 key; echo ''; if [ \"$key\" != 'r' ] && [ \"$key\" != 'R' ]; then break; fi; done"
+        }
+    }
+
+    // Tab 2: 日志查看
+    tab name="logs" {
+        pane split_direction="horizontal" {
+            pane {
+                name "App Logs"
+                command "sh"
+                args "-c" "echo 'Logs: ~/.local-router/logs/'; ls ~/.local-router/logs/ 2>/dev/null || echo 'No logs yet. Enable in config.json5'; exec bash"
+            }
+        }
+    }
+
+    // Tab 3: 终端操作
+    tab name="terminal" {
+        pane split_direction="horizontal" {
+            pane {
+                name "Shell"
+                command "sh"
+                args "-c" "echo 'Common commands:'; echo '  bun run dev:api'; echo '  bun run dev:web'; echo '  bun run build'; echo '  bun run test'; echo ''; exec bash"
+            }
+        }
+    }
+}

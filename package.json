@@ -1,0 +1,57 @@
+{
+  "name": "local-router",
+  "version": "0.0.1",
+  "packageManager": "bun@1.2.0",
+  "workspaces": [
+    "web"
+  ],
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "bin": {
+    "local-router": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "config.schema.json",
+    "README.md"
+  ],
+  "bun": {
+    "target": "bun",
+    "minify": true,
+    "sourcemap": "external"
+  },
+  "scripts": {
+    "dev": "bun run dev:api & bun run dev:web",
+    "dev:api": "NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1 PORT=4099 ADMIN_DEV_SERVER_URL=http://localhost:5177 bun run --hot src/entry.ts",
+    "dev:web": "cd web && bun run dev",
+    "build": "bun run build:api & bun run build:web & bun run build:cli & wait",
+    "build:web": "cd web && bun run build",
+    "build:api": "bun build src/entry.ts --target bun --outdir dist",
+    "build:cli": "bun build src/cli.ts --target bun --outfile dist/cli.js",
+    "start": "bun run dist/cli.js start",
+    "prepublishOnly": "bun run check && bun run build",
+    "test": "bun test",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format .",
+    "format:fix": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
+  },
+  "dependencies": {
+    "@hono/swagger-ui": "^0.5.3",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
+    "hono": "^4.12.3",
+    "json5": "^2.2.3"
+  },
+  "devDependencies": {
+    "@ai-sdk/anthropic": "^3.0.58",
+    "@ai-sdk/openai": "^3.0.41",
+    "@ai-sdk/openai-compatible": "^2.0.35",
+    "@biomejs/biome": "^2.4.4",
+    "@types/bun": "latest",
+    "ai": "^6.0.116"
+  }
+}
