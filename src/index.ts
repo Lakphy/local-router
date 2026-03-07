@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { swaggerUI } from '@hono/swagger-ui';
 import Ajv2020 from 'ajv/dist/2020';
 import type { Context } from 'hono';
@@ -29,6 +28,7 @@ import { openAPISpec } from './openapi';
 import { createAnthropicMessagesRoutes } from './routes/anthropic-messages';
 import { createOpenaiCompletionsRoutes } from './routes/openai-completions';
 import { createOpenaiResponsesRoutes } from './routes/openai-responses';
+import { getBundledSchemaPath, getBundledWebRoot } from './runtime-assets';
 
 type CleanupFn = () => void;
 
@@ -135,7 +135,7 @@ function createAdminApiRoutes(store: ConfigStore, registerCleanup?: (cleanup: Cl
   const CRYPTO_SESSION_TTL_MS = 2 * 60 * 1000;
   const CRYPTO_SESSION_MAX = 512;
   const ajv = new Ajv2020({ allErrors: true, strict: false });
-  const schemaPath = resolve(process.cwd(), 'config.schema.json');
+  const schemaPath = getBundledSchemaPath();
   const schemaJson = JSON.parse(readFileSync(schemaPath, 'utf-8')) as Record<string, unknown>;
   const validateBySchema = ajv.compile(schemaJson);
 
@@ -792,11 +792,12 @@ export function createApp(
     console.log(`已注册管理面板代理: /admin -> ${adminDevServerOrigin}/admin`);
   } else {
     app.all('/admin', (c) => c.redirect('/admin/', 308));
+    const bundledWebRoot = getBundledWebRoot();
     const adminStatic = serveStatic({
-      root: './dist/web',
+      root: bundledWebRoot,
       rewriteRequestPath: (path) => path.replace(/^\/admin/, ''),
     });
-    const adminIndex = serveStatic({ root: './dist/web', path: './index.html' });
+    const adminIndex = serveStatic({ root: bundledWebRoot, path: './index.html' });
 
     app.use('/admin/*', adminStatic);
     app.get('/admin/*', async (c, next) => {
