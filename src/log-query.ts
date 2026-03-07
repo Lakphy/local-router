@@ -115,6 +115,7 @@ export interface LogEventDetail {
   };
   upstream: {
     targetUrl: string;
+    proxyUrl: string | null;
     providerRequestId: string | null;
     errorType: string | null;
     errorMessage: string | null;
@@ -604,6 +605,7 @@ async function buildLogEventDetail(
     },
     upstream: {
       targetUrl: maskedEvent.target_url,
+      proxyUrl: maskedEvent.proxy_url ?? null,
       providerRequestId: maskedEvent.provider_request_id,
       errorType: maskedEvent.error_type,
       errorMessage: maskedEvent.error_message,

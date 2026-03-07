@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { Context } from 'hono';
 import type { LogEvent, LogMeta } from './logger';
-import { extractProviderRequestId, getLogger } from './logger';
+import { extractProviderRequestId, getLogger, maskUrlCredentials } from './logger';
 
 export type AuthType = 'x-api-key' | 'bearer';
 
@@ -71,6 +71,7 @@ export interface ProxyRequestOptions {
 function buildLogEvent(
   logMeta: LogMeta,
   targetUrl: string,
+  proxyUrl: string | undefined,
   tsEnd: number,
   overrides: Partial<LogEvent>
 ): LogEvent {
@@ -86,7 +87,8 @@ function buildLogEvent(
     provider: logMeta.provider,
     model_in: logMeta.modelIn,
     model_out: logMeta.modelOut,
-    target_url: targetUrl,
+    target_url: maskUrlCredentials(targetUrl),
+    proxy_url: proxyUrl ? maskUrlCredentials(proxyUrl) : null,
     is_stream: logMeta.isStream,
     upstream_status: 0,
     content_type_req: logMeta.contentTypeReq,
@@ -162,7 +164,7 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
   } catch (err) {
     if (shouldLog) {
       logger?.writeEvent(
-        buildLogEvent(logMeta, options.targetUrl, Date.now(), {
+        buildLogEvent(logMeta, options.targetUrl, proxy, Date.now(), {
           error_type: err instanceof Error ? err.constructor.name : 'UnknownError',
           error_message: err instanceof Error ? err.message : String(err),
           ...(requestBody !== undefined && { request_body: requestBody }),
@@ -210,7 +212,7 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
         console.error('[logger] 流式日志处理失败:', err);
       } finally {
         logger?.writeEvent(
-          buildLogEvent(logMeta, options.targetUrl, Date.now(), {
+          buildLogEvent(logMeta, options.targetUrl, proxy, Date.now(), {
             upstream_status: upstreamRes.status,
             content_type_res: contentTypeRes,
             response_headers: responseHeaders,
@@ -248,7 +250,7 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
     eventOverrides.response_body = responseText;
   }
 
-  logger?.writeEvent(buildLogEvent(logMeta, options.targetUrl, Date.now(), eventOverrides));
+  logger?.writeEvent(buildLogEvent(logMeta, options.targetUrl, proxy, Date.now(), eventOverrides));
 
   return new Response(responseText, {
     status: upstreamRes.status,

@@ -270,6 +270,7 @@ export interface LogEventDetail {
   };
   upstream: {
     targetUrl: string;
+    proxyUrl: string | null;
     providerRequestId: string | null;
     errorType: string | null;
     errorMessage: string | null;

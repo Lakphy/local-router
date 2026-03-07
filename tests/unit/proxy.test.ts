@@ -58,6 +58,7 @@ describe('proxy 日志功能', () => {
         model_in: logMeta.modelIn,
         model_out: logMeta.modelOut,
         target_url: 'https://api.test.com/v1/chat/completions',
+        proxy_url: 'http://127.0.0.1:7890',
         is_stream: logMeta.isStream,
         upstream_status: 200,
         content_type_req: logMeta.contentTypeReq,
@@ -77,6 +78,7 @@ describe('proxy 日志功能', () => {
       expect(event.route_type).toBe('openai-completions');
       expect(event.provider).toBe('test-provider');
       expect(event.latency_ms).toBe(500);
+      expect(event.proxy_url).toBe('http://127.0.0.1:7890');
       expect(event.is_stream).toBe(false);
       expect(event.upstream_status).toBe(200);
       expect(event.error_type).toBeNull();

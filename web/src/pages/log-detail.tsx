@@ -177,6 +177,7 @@ export function LogDetailPage() {
               <MetaItem label="route_rule_key" value={detail.summary.routeRuleKey} mono />
               <MetaItem label="latency" value={`${detail.summary.latencyMs} ms`} />
               <MetaItem label="target_url" value={detail.upstream.targetUrl} mono />
+              <MetaItem label="proxy_url" value={detail.upstream.proxyUrl ?? '-'} mono />
               <MetaItem
                 label="定位"
                 value={`${detail.location.file}:${detail.location.line}`}

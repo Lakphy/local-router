@@ -23,6 +23,7 @@ export interface LogEvent {
   model_in: string;
   model_out: string;
   target_url: string;
+  proxy_url?: string | null;
   is_stream: boolean;
   upstream_status: number;
   content_type_req: string | null;
@@ -165,4 +166,16 @@ export function extractProviderRequestId(headers: Headers): string | null {
     if (val) return val;
   }
   return null;
+}
+
+export function maskUrlCredentials(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl);
+    if (!parsed.username && !parsed.password) return rawUrl;
+    if (parsed.username) parsed.username = '****';
+    if (parsed.password) parsed.password = '****';
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
 }

@@ -8,6 +8,7 @@ import {
   initLogger,
   type LogEvent,
   maskHeaders,
+  maskUrlCredentials,
 } from '../../src/logger';
 import type { LogConfig } from '../../src/config';
 
@@ -98,6 +99,20 @@ describe('logger', () => {
     });
   });
 
+  describe('maskUrlCredentials', () => {
+    test('应脱敏 URL 中的用户名和密码', () => {
+      expect(maskUrlCredentials('http://user:pass@127.0.0.1:7890')).toBe(
+        'http://****:****@127.0.0.1:7890/'
+      );
+    });
+
+    test('无凭证 URL 应保持不变', () => {
+      expect(maskUrlCredentials('https://api.example.com/v1/messages')).toBe(
+        'https://api.example.com/v1/messages'
+      );
+    });
+  });
+
   describe('writeEvent', () => {
     test('应写入 JSONL 格式的事件日志', () => {
       const config: LogConfig = {};
@@ -117,6 +132,7 @@ describe('logger', () => {
         model_in: 'gpt-4',
         model_out: 'gpt-4-turbo',
         target_url: 'https://api.openai.com/v1/chat/completions',
+        proxy_url: 'http://****:****@127.0.0.1:7890/',
         is_stream: false,
         upstream_status: 200,
         content_type_req: 'application/json',
@@ -143,6 +159,7 @@ describe('logger', () => {
       expect(parsed.request_id).toBe('test-uuid-123');
       expect(parsed.method).toBe('POST');
       expect(parsed.upstream_status).toBe(200);
+      expect(parsed.proxy_url).toBe('http://****:****@127.0.0.1:7890/');
     });
 
     test('应在同一天的多条事件追加到同一文件', () => {
