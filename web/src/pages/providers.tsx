@@ -1,5 +1,5 @@
-import { Copy, Plus, Server, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronDown, ChevronUp, Copy, GripVertical, Plus, Trash2 } from 'lucide-react';
+import { useState, type DragEvent } from 'react';
 import { ProviderForm } from '@/components/provider-form';
 import {
   AlertDialog,
@@ -15,6 +15,13 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -27,6 +34,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 import { useConfigStore } from '@/stores/config-store';
 import type { ProviderConfig } from '@/types/config';
 
@@ -37,6 +45,53 @@ const DEFAULT_PROVIDER: ProviderConfig = {
   proxy: '',
   models: {},
 };
+
+type DropPosition = 'before' | 'after';
+
+function reorderProviders(
+  providers: Record<string, ProviderConfig>,
+  sourceName: string,
+  targetName: string,
+  position: DropPosition
+) {
+  const names = Object.keys(providers);
+  if (sourceName === targetName) return providers;
+
+  const reorderedNames = names.filter((name) => name !== sourceName);
+  let insertIndex = reorderedNames.indexOf(targetName);
+  if (insertIndex === -1) return providers;
+  if (position === 'after') insertIndex += 1;
+  reorderedNames.splice(insertIndex, 0, sourceName);
+
+  const nextProviders: Record<string, ProviderConfig> = {};
+  for (const name of reorderedNames) {
+    nextProviders[name] = providers[name];
+  }
+  return nextProviders;
+}
+
+function moveProviderToIndex(
+  providers: Record<string, ProviderConfig>,
+  sourceName: string,
+  targetIndex: number
+) {
+  const names = Object.keys(providers);
+  const sourceIndex = names.indexOf(sourceName);
+  if (sourceIndex === -1) return providers;
+
+  const boundedIndex = Math.max(0, Math.min(targetIndex, names.length - 1));
+  if (boundedIndex === sourceIndex) return providers;
+
+  const reorderedNames = [...names];
+  reorderedNames.splice(sourceIndex, 1);
+  reorderedNames.splice(boundedIndex, 0, sourceName);
+
+  const nextProviders: Record<string, ProviderConfig> = {};
+  for (const name of reorderedNames) {
+    nextProviders[name] = providers[name];
+  }
+  return nextProviders;
+}
 
 export function ProvidersPage() {
   const draft = useConfigStore((s) => s.draft);
@@ -49,6 +104,13 @@ export function ProvidersPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [copyName, setCopyName] = useState('');
+  const [copySource, setCopySource] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [draggingName, setDraggingName] = useState<string | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<{
+    name: string;
+    position: DropPosition;
+  } | null>(null);
 
   if (!draft) return null;
 
@@ -80,22 +142,71 @@ export function ProvidersPage() {
       return cfg;
     });
     setSelected(names.find((n) => n !== name) ?? null);
+    setPendingDelete(null);
+  }
+
+  function openCopyDialog(name: string) {
+    setCopySource(name);
+    setCopyDialogOpen(true);
   }
 
   function handleCopy() {
-    if (!selected || !providers[selected]) return;
+    if (!copySource || !providers[copySource]) return;
     const name = copyName
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9-]/g, '-');
     if (!name || providers[name]) return;
     updateDraft((cfg) => {
-      cfg.providers[name] = structuredClone(cfg.providers[selected]);
+      cfg.providers[name] = structuredClone(cfg.providers[copySource]);
       return cfg;
     });
     setSelected(name);
     setCopyName('');
+    setCopySource(null);
     setCopyDialogOpen(false);
+  }
+
+  function moveProvider(name: string, targetIndex: number) {
+    updateDraft((cfg) => {
+      cfg.providers = moveProviderToIndex(cfg.providers, name, targetIndex);
+      return cfg;
+    });
+  }
+
+  function getDropPosition(event: DragEvent<HTMLButtonElement>): DropPosition {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY - rect.top < rect.height / 2 ? 'before' : 'after';
+  }
+
+  function handleDragStart(event: DragEvent<HTMLButtonElement>, name: string) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', name);
+    setDraggingName(name);
+    setDropIndicator(null);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLButtonElement>, name: string) {
+    if (!draggingName) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDropIndicator({ name, position: getDropPosition(event) });
+  }
+
+  function clearDragState() {
+    setDraggingName(null);
+    setDropIndicator(null);
+  }
+
+  function handleDrop(event: DragEvent<HTMLButtonElement>, targetName: string) {
+    if (!draggingName) return;
+    event.preventDefault();
+    const position = getDropPosition(event);
+    updateDraft((cfg) => {
+      cfg.providers = reorderProviders(cfg.providers, draggingName, targetName, position);
+      return cfg;
+    });
+    clearDragState();
   }
 
   return (
@@ -113,31 +224,105 @@ export function ProvidersPage() {
                 {names.map((name) => {
                   const p = providers[name];
                   const modelCount = Object.keys(p.models).length;
+                  const showDropBefore =
+                    dropIndicator?.name === name &&
+                    dropIndicator.position === 'before' &&
+                    draggingName !== name;
+                  const showDropAfter =
+                    dropIndicator?.name === name &&
+                    dropIndicator.position === 'after' &&
+                    draggingName !== name;
                   return (
-                    <button
-                      key={name}
-                      type="button"
-                      className={`w-full min-w-0 overflow-hidden text-left rounded-lg border p-3 transition-colors hover:bg-accent cursor-pointer ${
-                        selected === name ? 'border-primary bg-accent' : 'border-border'
-                      }`}
-                      onClick={() => setSelected(name)}
-                    >
-                      <div className="flex w-full min-w-0 items-center gap-2">
-                        <Server className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="block min-w-0 flex-1 truncate font-medium text-sm">{name}</span>
-                      </div>
-                      <div className="mt-1.5 ml-6 flex w-full min-w-0 items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className="min-w-0 max-w-full overflow-hidden text-xs"
-                        >
-                          <span className="block min-w-0 truncate">{p.type}</span>
-                        </Badge>
-                        <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-                          {modelCount} 个模型
-                        </span>
-                      </div>
-                    </button>
+                    <div key={name} className="relative">
+                      <div
+                        className={cn(
+                          'pointer-events-none absolute inset-x-2 z-10 h-0.5 rounded-full bg-primary transition-opacity',
+                          showDropBefore ? 'top-0 opacity-100' : 'top-0 opacity-0'
+                        )}
+                      />
+                      <ContextMenu>
+                        <ContextMenuTrigger asChild>
+                          <button
+                            type="button"
+                            draggable
+                            className={cn(
+                              'w-full min-w-0 cursor-pointer overflow-hidden rounded-lg border p-3 text-left transition-colors hover:bg-accent',
+                              selected === name ? 'border-primary bg-accent' : 'border-border',
+                              draggingName === name && 'opacity-60'
+                            )}
+                            onClick={() => setSelected(name)}
+                            onContextMenu={() => setSelected(name)}
+                            onDragStart={(event) => handleDragStart(event, name)}
+                            onDragOver={(event) => handleDragOver(event, name)}
+                            onDrop={(event) => handleDrop(event, name)}
+                            onDragEnd={clearDragState}
+                          >
+                            <div className="flex w-full min-w-0 items-center gap-2">
+                              <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span className="block min-w-0 flex-1 truncate font-medium text-sm">
+                                {name}
+                              </span>
+                            </div>
+                            <div className="mt-1.5 flex w-full min-w-0 items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className="min-w-0 max-w-full overflow-hidden text-xs"
+                              >
+                                <span className="block min-w-0 truncate">{p.type}</span>
+                              </Badge>
+                              <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+                                {modelCount} 个模型
+                              </span>
+                            </div>
+                          </button>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent className="w-48">
+                          <ContextMenuItem onSelect={() => openCopyDialog(name)}>
+                            <Copy className="h-4 w-4" />
+                            复制
+                          </ContextMenuItem>
+                          <ContextMenuItem onSelect={() => setPendingDelete(name)} variant="destructive">
+                            <Trash2 className="h-4 w-4" />
+                            删除
+                          </ContextMenuItem>
+                          <ContextMenuSeparator />
+                          <ContextMenuItem
+                            onSelect={() => moveProvider(name, names.indexOf(name) - 1)}
+                            disabled={names.indexOf(name) <= 0}
+                          >
+                            <ChevronUp className="h-4 w-4" />
+                            上移
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            onSelect={() => moveProvider(name, names.indexOf(name) + 1)}
+                            disabled={names.indexOf(name) >= names.length - 1}
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                            下移
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            onSelect={() => moveProvider(name, 0)}
+                            disabled={names.indexOf(name) <= 0}
+                          >
+                            <ChevronUp className="h-4 w-4" />
+                            上移至顶部
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            onSelect={() => moveProvider(name, names.length - 1)}
+                            disabled={names.indexOf(name) >= names.length - 1}
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                            下移至底部
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
+                      <div
+                        className={cn(
+                          'pointer-events-none absolute inset-x-2 bottom-0 z-10 h-0.5 rounded-full bg-primary transition-opacity',
+                          showDropAfter ? 'opacity-100' : 'opacity-0'
+                        )}
+                      />
+                    </div>
                   );
                 })}
               </div>
@@ -195,7 +380,16 @@ export function ProvidersPage() {
                   </h3>
                   {selected && providers[selected] && (
                     <div className="flex items-center gap-1 shrink-0">
-                      <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
+                      <Dialog
+                        open={copyDialogOpen}
+                        onOpenChange={(open) => {
+                          setCopyDialogOpen(open);
+                          if (!open) {
+                            setCopyName('');
+                            setCopySource(null);
+                          }
+                        }}
+                      >
                         <DialogTrigger asChild>
                           <Button
                             type="button"
@@ -203,6 +397,7 @@ export function ProvidersPage() {
                             size="icon"
                             className="h-8 w-8"
                             aria-label="复制此 Provider"
+                            onClick={() => selected && openCopyDialog(selected)}
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
@@ -232,7 +427,12 @@ export function ProvidersPage() {
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>
-                      <AlertDialog>
+                      <AlertDialog
+                        open={pendingDelete !== null}
+                        onOpenChange={(open) => {
+                          if (!open) setPendingDelete(null);
+                        }}
+                      >
                         <AlertDialogTrigger asChild>
                           <Button
                             type="button"
@@ -240,6 +440,7 @@ export function ProvidersPage() {
                             size="icon"
                             className="h-8 w-8 text-destructive hover:text-destructive"
                             aria-label="删除此 Provider"
+                            onClick={() => selected && setPendingDelete(selected)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -248,13 +449,15 @@ export function ProvidersPage() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>确认删除</AlertDialogTitle>
                             <AlertDialogDescription>
-                              确定要删除 Provider「{selected}」吗？引用此 Provider
+                              确定要删除 Provider「{pendingDelete}」吗？引用此 Provider
                               的路由规则将失效。
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>取消</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(selected)}>
+                            <AlertDialogAction
+                              onClick={() => pendingDelete && handleDelete(pendingDelete)}
+                            >
                               删除
                             </AlertDialogAction>
                           </AlertDialogFooter>
