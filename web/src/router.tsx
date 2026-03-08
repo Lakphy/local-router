@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter, Navigate } from '@tanstack/react-router';
 import App from '@/App';
+import { ChatPage } from '@/pages/chat';
 import { DashboardPage } from '@/pages/dashboard';
 import { LogDetailPage } from '@/pages/log-detail';
 import { LogsPage } from '@/pages/logs';
@@ -22,6 +23,12 @@ const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dashboard',
   component: DashboardPage,
+});
+
+const chatRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/chat',
+  component: ChatPage,
 });
 
 const providersRoute = createRoute({
@@ -67,6 +74,7 @@ const logsSettingsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   dashboardRoute,
+  chatRoute,
   providersRoute,
   routesRoute,
   logsRoute,

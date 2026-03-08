@@ -11,6 +11,7 @@ import { useDialogStore } from '@/stores/dialog-store';
 
 const PAGE_META: Record<string, { title: string; configPage: boolean }> = {
   '/dashboard': { title: '仪表盘', configPage: false },
+  '/chat': { title: '聊天面板', configPage: false },
   '/providers': { title: 'Providers', configPage: true },
   '/routes': { title: '路由', configPage: true },
   '/logs-settings': { title: '日志配置', configPage: true },

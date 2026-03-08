@@ -1,5 +1,5 @@
 import { Link, useRouterState } from '@tanstack/react-router';
-import { FileCog, FileSearch, LayoutDashboard, Route, Server, Users } from 'lucide-react';
+import { FileCog, FileSearch, LayoutDashboard, MessageSquare, Route, Server, Users } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -11,11 +11,12 @@ import {
 } from '@/components/ui/sidebar';
 
 const NAV_ITEMS: {
-  to: '/dashboard' | '/providers' | '/routes' | '/logs' | '/sessions' | '/logs-settings';
+  to: '/dashboard' | '/chat' | '/providers' | '/routes' | '/logs' | '/sessions' | '/logs-settings';
   label: string;
   icon: typeof LayoutDashboard;
 }[] = [
   { to: '/dashboard', label: '仪表盘', icon: LayoutDashboard },
+  { to: '/chat', label: '聊天面板', icon: MessageSquare },
   { to: '/logs', label: '日志检索', icon: FileSearch },
   { to: '/sessions', label: '用户会话', icon: Users },
   { to: '/providers', label: '供应商配置', icon: Server },

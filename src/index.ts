@@ -1,4 +1,8 @@
 import { readFileSync } from 'node:fs';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { streamText } from 'ai';
 import { swaggerUI } from '@hono/swagger-ui';
 import Ajv2020 from 'ajv/dist/2020';
 import type { Context } from 'hono';
@@ -126,6 +130,78 @@ function printIntegrationGuide(config: { routes: Record<string, Record<string, R
   }
 
   console.log('=======================================================\n');
+}
+
+interface ChatProxyMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+interface ChatProxyRequestBody {
+  provider: string;
+  model: string;
+  messages: ChatProxyMessage[];
+  maxOutputTokens?: number;
+}
+
+function isChatProxyMessage(value: unknown): value is ChatProxyMessage {
+  if (!value || typeof value !== 'object') return false;
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    (candidate.role === 'system' || candidate.role === 'user' || candidate.role === 'assistant') &&
+    typeof candidate.content === 'string'
+  );
+}
+
+function createUpstreamFetch(proxy?: string): typeof fetch | undefined {
+  const proxyUrl = proxy?.trim();
+  if (!proxyUrl) return undefined;
+
+  return ((input: RequestInfo | URL, init?: RequestInit) =>
+    fetch(input, {
+      ...init,
+      proxy: proxyUrl,
+      decompress: true,
+    })) as typeof fetch;
+}
+
+function normalizeChatProxyBaseUrl(
+  providerType: AppConfig['providers'][string]['type'],
+  base: string
+): string {
+  const normalized = base.replace(/\/+$/, '');
+
+  // AI SDK 的 Anthropic provider 默认按 `${baseURL}/messages` 拼接，
+  // 因此它期望 baseURL 语义接近官方的 `.../v1`。
+  // 现有 local-router 配置里 anthropic provider 的 base 一直是上游根前缀，
+  // 例如 DashScope 使用 `https://dashscope.aliyuncs.com/apps/anthropic`，
+  // 真实请求路径再由路由层补 `/v1/messages`。这里做一次兼容补齐。
+  if (providerType === 'anthropic-messages' && !normalized.endsWith('/v1')) {
+    return `${normalized}/v1`;
+  }
+
+  return normalized;
+}
+
+function createChatProxyModel(providerName: string, providerConfig: AppConfig['providers'][string], model: string) {
+  const common = {
+    apiKey: providerConfig.apiKey,
+    baseURL: normalizeChatProxyBaseUrl(providerConfig.type, providerConfig.base),
+    name: `chat-proxy.${providerName}`,
+    fetch: createUpstreamFetch(providerConfig.proxy),
+  };
+
+  switch (providerConfig.type) {
+    case 'openai-completions':
+      return createOpenAICompatible(common)(model);
+    case 'openai-responses':
+      return createOpenAI(common).responses(model);
+    case 'anthropic-messages':
+      return createAnthropic(common).messages(model);
+    default:
+      throw new Error(`暂不支持的 provider 类型: ${providerConfig.type}`);
+  }
 }
 
 // 管理面板配置 API
@@ -294,6 +370,60 @@ function createAdminApiRoutes(store: ConfigStore, registerCleanup?: (cleanup: Cl
     } catch (err) {
       return c.json(
         { error: `读取配置 schema 失败: ${err instanceof Error ? err.message : err}` },
+        500
+      );
+    }
+  });
+
+  api.post('/chat/proxy', async (c) => {
+    let body: ChatProxyRequestBody;
+    try {
+      body = await c.req.json<ChatProxyRequestBody>();
+    } catch {
+      return c.json({ error: '请求体不是合法 JSON' }, 400);
+    }
+
+    if (!body || typeof body.provider !== 'string' || typeof body.model !== 'string') {
+      return c.json({ error: 'provider 和 model 为必填字段' }, 400);
+    }
+
+    if (!Array.isArray(body.messages) || body.messages.length === 0 || !body.messages.every(isChatProxyMessage)) {
+      return c.json({ error: 'messages 必须是非空消息数组' }, 400);
+    }
+
+    if (
+      body.maxOutputTokens !== undefined &&
+      (!Number.isInteger(body.maxOutputTokens) || body.maxOutputTokens <= 0)
+    ) {
+      return c.json({ error: 'maxOutputTokens 必须是正整数' }, 400);
+    }
+
+    const config = store.get();
+    const providerConfig = config.providers[body.provider];
+    if (!providerConfig) {
+      return c.json({ error: `provider "${body.provider}" 未在配置中定义` }, 404);
+    }
+
+    if (!providerConfig.base.trim() || !providerConfig.apiKey.trim()) {
+      return c.json({ error: `provider "${body.provider}" 缺少 base 或 apiKey` }, 400);
+    }
+
+    try {
+      const result = streamText({
+        model: createChatProxyModel(body.provider, providerConfig, body.model),
+        messages: body.messages,
+        ...(body.maxOutputTokens ? { maxOutputTokens: body.maxOutputTokens } : {}),
+      });
+
+      return result.toTextStreamResponse({
+        headers: {
+          'x-chat-provider': body.provider,
+          'x-chat-model': body.model,
+        },
+      });
+    } catch (err) {
+      return c.json(
+        { error: `chat 代理失败: ${err instanceof Error ? err.message : String(err)}` },
         500
       );
     }
