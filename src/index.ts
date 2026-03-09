@@ -4,7 +4,6 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { streamText } from 'ai';
 import { swaggerUI } from '@hono/swagger-ui';
-import Ajv2020 from 'ajv/dist/2020';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
@@ -33,6 +32,7 @@ import { createAnthropicMessagesRoutes } from './routes/anthropic-messages';
 import { createOpenaiCompletionsRoutes } from './routes/openai-completions';
 import { createOpenaiResponsesRoutes } from './routes/openai-responses';
 import { getBundledSchemaPath, getBundledWebRoot } from './runtime-assets';
+import { validateConfigOrThrow } from './config-validate';
 
 type CleanupFn = () => void;
 
@@ -210,10 +210,8 @@ function createAdminApiRoutes(store: ConfigStore, registerCleanup?: (cleanup: Cl
   const cryptoSessions = new Map<string, { session: CryptoSession; createdAt: number }>();
   const CRYPTO_SESSION_TTL_MS = 2 * 60 * 1000;
   const CRYPTO_SESSION_MAX = 512;
-  const ajv = new Ajv2020({ allErrors: true, strict: false });
   const schemaPath = getBundledSchemaPath();
   const schemaJson = JSON.parse(readFileSync(schemaPath, 'utf-8')) as Record<string, unknown>;
-  const validateBySchema = ajv.compile(schemaJson);
 
   const pruneExpiredCryptoSessions = (now = Date.now()) => {
     for (const [id, record] of Array.from(cryptoSessions.entries())) {
@@ -323,12 +321,10 @@ function createAdminApiRoutes(store: ConfigStore, registerCleanup?: (cleanup: Cl
         return c.json({ error: `配置校验失败: ${err instanceof Error ? err.message : err}` }, 400);
       }
 
-      const schemaValid = validateBySchema(candidate);
-      if (!schemaValid) {
-        const firstError = validateBySchema.errors?.[0];
-        const path = firstError?.instancePath || '(root)';
-        const message = firstError?.message ?? 'unknown schema validation error';
-        return c.json({ error: `Schema 校验失败: ${path} ${message}` }, 400);
+      try {
+        validateConfigOrThrow(candidate);
+      } catch (err) {
+        return c.json({ error: `配置校验失败: ${err instanceof Error ? err.message : err}` }, 400);
       }
 
       store.save(candidate);

@@ -14,6 +14,7 @@ import {
   stopProcess,
 } from './cli/process';
 import { getRuntimeFiles, readRuntimeState, resolveConfigArgPath } from './cli/runtime';
+import { cmdConfig } from './cli/config-command';
 
 function printHelp(): void {
   console.log(`
@@ -29,6 +30,7 @@ Commands:
   status [--json]
   logs [--follow] [--lines <n>]
   init [--config <path>] [--force]
+  config <subcommand> [...args]
   health
   version
 
@@ -269,6 +271,9 @@ async function main(): Promise<void> {
       return;
     case 'health':
       await cmdHealth();
+      return;
+    case 'config':
+      await cmdConfig(rest);
       return;
     case 'version':
       await printVersion();
