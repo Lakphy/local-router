@@ -99,6 +99,7 @@ local-router version
 - `--host <host>`：指定监听地址
 - `--port <port>`：指定监听端口
 - `--daemon`：后台运行
+- `--idle-timeout <sec>`：设置 Bun 连接空闲超时（默认 600 秒，设为 `0` 可关闭）
 
 ## 请求入口（给你的应用调用）
 
@@ -194,6 +195,25 @@ curl -X POST "http://127.0.0.1:4099/openai-completions/v1/chat/completions" \
 - `routes.<type>` 是否缺少 `*` 规则
 - `routes` 引用的 provider 是否存在
 - 配置文件是否是合法 JSON5
+
+
+### 运行较久请求出现 `[Bun.serve]: request timed out after 10 seconds` 怎么办？
+
+这是 Bun 服务端连接空闲超时触发导致的（常见于长流式响应或慢速上游）。
+
+可在启动时放宽超时：
+
+```sh
+local-router start --idle-timeout 600
+# 或彻底关闭空闲超时
+local-router start --idle-timeout 0
+```
+
+也支持环境变量：
+
+```sh
+LOCAL_ROUTER_IDLE_TIMEOUT=600 local-router start
+```
 
 ### 如何升级？
 

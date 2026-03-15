@@ -16,6 +16,7 @@ export interface CliSharedFlags {
   config?: string;
   host?: string;
   port?: number;
+  idleTimeoutSeconds?: number;
 }
 
 export function parseSharedFlags(args: string[]): CliSharedFlags {
@@ -25,6 +26,7 @@ export function parseSharedFlags(args: string[]): CliSharedFlags {
       config: { type: 'string' },
       host: { type: 'string' },
       port: { type: 'string' },
+      'idle-timeout': { type: 'string' },
     },
     allowPositionals: true,
     strict: false,
@@ -34,10 +36,17 @@ export function parseSharedFlags(args: string[]): CliSharedFlags {
   if (portRaw && !Number.isFinite(port)) {
     throw new Error(`无效端口: ${portRaw}`);
   }
+
+  const idleTimeoutRaw = parsed.values['idle-timeout'];
+  const idleTimeoutSeconds = idleTimeoutRaw ? Number.parseInt(idleTimeoutRaw, 10) : undefined;
+  if (idleTimeoutRaw && (!Number.isFinite(idleTimeoutSeconds) || idleTimeoutSeconds < 0)) {
+    throw new Error(`无效 idle-timeout: ${idleTimeoutRaw}`);
+  }
   return {
     config: parsed.values.config,
     host: parsed.values.host,
     port,
+    idleTimeoutSeconds,
   };
 }
 
@@ -78,6 +87,7 @@ export async function runServerProcess(opts: {
   config?: string;
   host?: string;
   port?: number;
+  idleTimeoutSeconds?: number;
   logFile?: string;
 }): Promise<never> {
   await cleanupIfStale();
@@ -93,12 +103,16 @@ export async function runServerProcess(opts: {
     throw new Error(`无效端口: ${opts.port ?? process.env.PORT}`);
   }
 
+  const idleTimeoutSeconds =
+    opts.idleTimeoutSeconds ?? Number.parseInt(process.env.LOCAL_ROUTER_IDLE_TIMEOUT ?? '', 10);
+
   let running: RunningServer;
   try {
     running = startServer({
       configPath: ensured.path,
       host,
       port,
+      idleTimeoutSeconds: Number.isFinite(idleTimeoutSeconds) ? idleTimeoutSeconds : undefined,
     });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException | undefined)?.code;
@@ -181,6 +195,9 @@ export async function startDaemon(flags: CliSharedFlags): Promise<void> {
   }
   if (typeof flags.port === 'number') {
     childArgs.push('--port', String(flags.port));
+  }
+  if (typeof flags.idleTimeoutSeconds === 'number') {
+    childArgs.push('--idle-timeout', String(flags.idleTimeoutSeconds));
   }
   childArgs.push('--log-file', files.daemonLog);
 

@@ -24,9 +24,9 @@ Usage:
   local-router <command> [options]
 
 Commands:
-  start [--daemon] [--config <path>] [--host <host>] [--port <port>]
+  start [--daemon] [--config <path>] [--host <host>] [--port <port>] [--idle-timeout <sec>]
   stop
-  restart [--daemon] [--config <path>] [--host <host>] [--port <port>]
+  restart [--daemon] [--config <path>] [--host <host>] [--port <port>] [--idle-timeout <sec>]
   status [--json]
   logs [--follow] [--lines <n>]
   init [--config <path>] [--force]
@@ -36,7 +36,7 @@ Commands:
   version
 
 Hidden commands:
-  __run-server --mode <daemon|foreground> [--config] [--host] [--port] [--log-file]
+  __run-server --mode <daemon|foreground> [--config] [--host] [--port] [--idle-timeout] [--log-file]
 `);
 }
 
@@ -69,6 +69,7 @@ async function cmdStart(args: string[]): Promise<void> {
     config: flags.config,
     host: flags.host,
     port: flags.port,
+    idleTimeoutSeconds: flags.idleTimeoutSeconds,
   });
 }
 
@@ -283,6 +284,7 @@ async function cmdRunServer(args: string[]): Promise<void> {
       config: { type: 'string' },
       host: { type: 'string' },
       port: { type: 'string' },
+      'idle-timeout': { type: 'string' },
       'log-file': { type: 'string' },
     },
     allowPositionals: true,
@@ -291,11 +293,14 @@ async function cmdRunServer(args: string[]): Promise<void> {
   const mode = parsed.values.mode === 'daemon' ? 'daemon' : 'foreground';
   const portRaw = parsed.values.port;
   const port = portRaw ? Number.parseInt(portRaw, 10) : undefined;
+  const idleTimeoutRaw = parsed.values['idle-timeout'];
+  const idleTimeoutSeconds = idleTimeoutRaw ? Number.parseInt(idleTimeoutRaw, 10) : undefined;
   await runServerProcess({
     mode,
     config: parsed.values.config,
     host: parsed.values.host,
     port,
+    idleTimeoutSeconds: Number.isFinite(idleTimeoutSeconds) ? idleTimeoutSeconds : undefined,
     logFile: parsed.values['log-file'],
   });
 }
