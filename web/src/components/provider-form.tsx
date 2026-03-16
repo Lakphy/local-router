@@ -158,13 +158,20 @@ function PluginListEditor({
     plugins.map((config) => ({ id: generatePluginId(), config }))
   );
 
-  // 当外部 plugins 数组长度变化（如父组件 reset），重新同步
+  // 当外部 plugins 数组变化（如父组件 reset/save 后写回），全量同步
   const prevPluginsRef = useRef(plugins);
   useEffect(() => {
     if (prevPluginsRef.current !== plugins) {
       prevPluginsRef.current = plugins;
-      // 只有在长度不同时重建，避免和内部编辑冲突
-      if (plugins.length !== entries.length) {
+      // 全量比较：长度不同或任意项内容不同时重建 entries
+      const needsSync =
+        plugins.length !== entries.length ||
+        plugins.some(
+          (p, i) =>
+            p.package !== entries[i]?.config.package ||
+            JSON.stringify(p.params) !== JSON.stringify(entries[i]?.config.params)
+        );
+      if (needsSync) {
         setEntries(plugins.map((config) => ({ id: generatePluginId(), config })));
       }
     }

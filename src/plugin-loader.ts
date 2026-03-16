@@ -9,7 +9,12 @@ interface LoadedPlugin {
 }
 
 function isLocalPath(pkg: string): boolean {
-  return pkg.startsWith('./') || pkg.startsWith('../') || pkg.startsWith('/');
+  return (
+    pkg.startsWith('./') ||
+    pkg.startsWith('../') ||
+    pkg.startsWith('/') ||
+    /^[A-Za-z]:[\\/]/.test(pkg) // Windows 绝对路径 (e.g. C:\plugins\x.ts)
+  );
 }
 
 async function importPlugin(pkg: string, configDir: string): Promise<PluginDefinition> {
@@ -74,15 +79,17 @@ export class PluginManager {
   }
 
   /**
-   * 原子热重载：先在临时容器中完成所有新插件的加载，
-   * 全部成功后原子替换旧 map，最后异步 dispose 旧实例。
-   * 即使部分插件加载失败，旧插件也不会被提前卸载。
+   * 原子热重载：先在临时容器中完成所有新插件的加载。
+   * 按 provider 粒度判断：如果某个 provider 的新插件全部加载成功，
+   * 则替换为新插件链；如果有任何失败，则保留该 provider 的旧插件链。
+   * 旧实例延迟 dispose 以保护 in-flight 请求。
    */
   async reloadAll(
     providers: Record<string, ProviderConfig>
   ): Promise<ReloadResult> {
     const newPlugins = new Map<string, LoadedPlugin[]>();
     const allFailures: { provider: string; package: string; error: string }[] = [];
+    const oldPluginsToDispose: LoadedPlugin[] = [];
 
     // 阶段 1：在临时容器中加载所有新插件
     for (const [providerName, providerConfig] of Object.entries(providers)) {
@@ -91,22 +98,59 @@ export class PluginManager {
           providerName,
           providerConfig.plugins
         );
-        newPlugins.set(providerName, loaded);
         allFailures.push(...failures);
+
+        if (failures.length > 0) {
+          // 该 provider 有加载失败，保留旧插件链，dispose 刚加载的新实例
+          console.warn(
+            `[plugin] provider "${providerName}" 有插件加载失败，保留旧插件链`
+          );
+          const oldLoaded = this.plugins.get(providerName);
+          if (oldLoaded) {
+            newPlugins.set(providerName, oldLoaded);
+          }
+          // 刚加载成功的新实例需要清理
+          for (const { instance, config } of loaded) {
+            try {
+              await instance.dispose?.();
+            } catch (err) {
+              console.error(
+                `[plugin] 回滚销毁插件 "${config.package}" 失败:`,
+                err instanceof Error ? err.message : err
+              );
+            }
+          }
+        } else {
+          // 全部成功，使用新插件链
+          newPlugins.set(providerName, loaded);
+          // 标记旧实例待 dispose
+          const oldLoaded = this.plugins.get(providerName);
+          if (oldLoaded) {
+            oldPluginsToDispose.push(...oldLoaded);
+          }
+        }
+      }
+      // 如果新配置中该 provider 没有 plugins，不保留旧的
+    }
+
+    // 对于旧 map 中有但新配置中没有 plugins 的 provider，也需要 dispose
+    for (const [providerName, oldLoaded] of this.plugins) {
+      if (!newPlugins.has(providerName)) {
+        oldPluginsToDispose.push(...oldLoaded);
       }
     }
 
-    // 阶段 2：保存旧实例引用，原子替换 map
-    const oldPlugins = this.plugins;
+    // 阶段 2：原子替换 map
     this.plugins = newPlugins;
 
-    // 阶段 3：异步 dispose 旧实例（不阻塞新请求，保护 in-flight 请求）
-    // 延迟 dispose 给 in-flight 请求留出完成时间
-    setTimeout(() => {
-      this.disposePluginMap(oldPlugins).catch((err) => {
-        console.error('[plugin] 旧插件销毁失败:', err);
-      });
-    }, 5000);
+    // 阶段 3：延迟 dispose 旧实例，保护 in-flight 请求
+    if (oldPluginsToDispose.length > 0) {
+      setTimeout(() => {
+        this.disposePluginList(oldPluginsToDispose).catch((err) => {
+          console.error('[plugin] 旧插件销毁失败:', err);
+        });
+      }, 5000);
+    }
 
     if (allFailures.length > 0) {
       console.warn(
@@ -129,22 +173,32 @@ export class PluginManager {
   }
 
   async disposeAll(): Promise<void> {
-    await this.disposePluginMap(this.plugins);
+    const allPlugins: LoadedPlugin[] = [];
+    for (const [, loadedPlugins] of this.plugins) {
+      allPlugins.push(...loadedPlugins);
+    }
     this.plugins.clear();
+    await this.disposePluginList(allPlugins);
+  }
+
+  private async disposePluginList(plugins: LoadedPlugin[]): Promise<void> {
+    for (const { instance, config } of plugins) {
+      try {
+        await instance.dispose?.();
+      } catch (err) {
+        console.error(
+          `[plugin] 销毁插件 "${config.package}" 失败:`,
+          err instanceof Error ? err.message : err
+        );
+      }
+    }
   }
 
   private async disposePluginMap(pluginMap: Map<string, LoadedPlugin[]>): Promise<void> {
+    const allPlugins: LoadedPlugin[] = [];
     for (const [, loadedPlugins] of pluginMap) {
-      for (const { instance, config } of loadedPlugins) {
-        try {
-          await instance.dispose?.();
-        } catch (err) {
-          console.error(
-            `[plugin] 销毁插件 "${config.package}" 失败:`,
-            err instanceof Error ? err.message : err
-          );
-        }
-      }
+      allPlugins.push(...loadedPlugins);
     }
+    await this.disposePluginList(allPlugins);
   }
 }
