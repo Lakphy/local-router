@@ -1,0 +1,9 @@
+{
+  "name": "local-router-plugin-strip-context-management",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "peerDependencies": {
+    "local-router": "workspace:*"
+  }
+}
