@@ -70,7 +70,7 @@ function SidebarProvider({
               ...style,
             } as React.CSSProperties
           }
-          className={cn("bg-[#EFEFEF] flex min-h-svh w-full", className)}
+          className={cn("flex min-h-svh w-full bg-sidebar", className)}
           {...props}
         >
           {children}
@@ -96,7 +96,7 @@ function Sidebar({
     >
       <div
         className={cn(
-          "fixed top-14 bottom-0 left-0 z-10 flex flex-col overflow-hidden bg-[#EFEFEF] transition-[width] duration-200 ease-in-out",
+          "fixed top-14 bottom-0 left-0 z-10 flex flex-col overflow-hidden bg-sidebar transition-[width] duration-200 ease-in-out",
           className,
         )}
         style={{
@@ -140,7 +140,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   return (
     <main
       className={cn(
-        "bg-white relative flex w-full flex-1 flex-col rounded-tl-2xl overflow-hidden",
+        "relative flex w-full flex-1 flex-col rounded-tl-2xl overflow-hidden bg-background",
         className,
       )}
       {...props}
