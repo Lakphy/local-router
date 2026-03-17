@@ -1,4 +1,4 @@
-import type { AppConfig, ConfigMeta, LogMetricsResponse, LogMetricsWindow } from '@/types/config';
+import type { AppConfig, ConfigMeta, LogMetricsResponse, LogMetricsWindow, UsageMetricsResponse, UsageMetricsWindow } from '@/types/config';
 import { CryptoClient, type EncryptedPayload } from './crypto';
 
 interface OneShotSession {
@@ -469,4 +469,19 @@ export function openLogTail(
   return () => {
     source.close();
   };
+}
+
+export async function fetchUsageMetrics(
+  window: UsageMetricsWindow = '24h',
+  refresh = false
+): Promise<UsageMetricsResponse> {
+  const params = new URLSearchParams({ window, refresh: refresh ? '1' : '0' });
+  const res = await fetch(`/api/usage?${params.toString()}`);
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `获取用量统计失败: ${res.status}`);
+  }
+
+  return res.json();
 }

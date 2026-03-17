@@ -30,6 +30,10 @@ export interface LogEvent {
   provider_request_id: string | null;
   error_type: string | null;
   error_message: string | null;
+  usage_input_tokens: number | null;
+  usage_output_tokens: number | null;
+  usage_cache_read_tokens: number | null;
+  usage_cache_creation_tokens: number | null;
   request_body?: unknown;
   response_body?: string;
   stream_file?: string;

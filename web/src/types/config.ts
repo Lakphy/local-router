@@ -8,6 +8,12 @@ export interface RouteTarget {
 export interface ModelCapabilities {
   'image-input'?: boolean;
   reasoning?: boolean;
+  pricing?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheCreation?: number;
+  };
 }
 
 export interface PluginConfig {
@@ -90,4 +96,47 @@ export interface LogMetricsResponse {
     network_error: number;
   };
   warnings: string[];
+}
+
+export type UsageMetricsWindow = '1h' | '6h' | '24h';
+
+export interface UsageMetricsResponse {
+  window: string;
+  from: string;
+  to: string;
+  summary: {
+    totalRequests: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCacheReadTokens: number;
+    totalCacheCreationTokens: number;
+    totalCost: number;
+  };
+  byProvider: Array<{
+    provider: string;
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+    cost: number;
+  }>;
+  byModel: Array<{
+    provider: string;
+    model: string;
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+    cost: number;
+    pricing: { input: number; output: number; cacheRead: number; cacheCreation: number } | null;
+  }>;
+  series: Array<{
+    ts: string;
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    cost: number;
+  }>;
 }

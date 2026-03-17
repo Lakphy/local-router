@@ -34,6 +34,7 @@ import { createAnthropicMessagesRoutes } from './routes/anthropic-messages';
 import { createOpenaiCompletionsRoutes } from './routes/openai-completions';
 import { createOpenaiResponsesRoutes } from './routes/openai-responses';
 import { getBundledSchemaPath, getBundledWebRoot } from './runtime-assets';
+import { getUsageMetrics, isUsageMetricsWindow } from './usage-metrics';
 import { validateConfigOrThrow } from './config-validate';
 
 type CleanupFn = () => void;
@@ -450,6 +451,31 @@ function createAdminApiRoutes(store: ConfigStore, pluginManager: PluginManager, 
     } catch (err) {
       return c.json(
         { error: `读取日志统计失败: ${err instanceof Error ? err.message : err}` },
+        500
+      );
+    }
+  });
+
+  api.get('/usage', async (c) => {
+    const config = store.get();
+    const window = c.req.query('window') ?? '24h';
+    const refresh = c.req.query('refresh') === '1';
+
+    if (!isUsageMetricsWindow(window)) {
+      return c.json({ error: 'window 参数仅支持 1h | 6h | 24h' }, 400);
+    }
+
+    try {
+      const metrics = await getUsageMetrics({
+        config,
+        logConfig: config.log,
+        window,
+        refresh,
+      });
+      return c.json(metrics);
+    } catch (err) {
+      return c.json(
+        { error: `读取用量统计失败: ${err instanceof Error ? err.message : err}` },
         500
       );
     }

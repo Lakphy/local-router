@@ -8,6 +8,7 @@ import { LogsSettingsPage } from '@/pages/logs-settings';
 import { ProvidersPage } from '@/pages/providers';
 import { RoutesPage } from '@/pages/routes';
 import { SessionsPage } from '@/pages/sessions';
+import { UsagePage } from '@/pages/usage';
 
 const rootRoute = createRootRoute({
   component: App,
@@ -71,6 +72,12 @@ const logsSettingsRoute = createRoute({
   component: LogsSettingsPage,
 });
 
+const usageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/usage',
+  component: UsagePage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   dashboardRoute,
@@ -81,6 +88,7 @@ const routeTree = rootRoute.addChildren([
   sessionsRoute,
   logDetailRoute,
   logsSettingsRoute,
+  usageRoute,
 ]);
 
 export const router = createRouter({

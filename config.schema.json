@@ -189,6 +189,10 @@
         "reasoning": {
           "type": "boolean",
           "description": "是否支持推理/思维链类能力（按你的业务语义定义）。"
+        },
+        "pricing": {
+          "$ref": "#/$defs/modelPricing",
+          "description": "模型定价信息，用于费用统计。"
         }
       },
       "examples": [
@@ -197,6 +201,33 @@
           "reasoning": true
         }
       ]
+    },
+    "modelPricing": {
+      "type": "object",
+      "description": "模型定价信息，单位为 USD / 1M tokens。",
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "type": "number",
+          "minimum": 0,
+          "description": "输入 token 单价（USD / 1M tokens）。"
+        },
+        "output": {
+          "type": "number",
+          "minimum": 0,
+          "description": "输出 token 单价（USD / 1M tokens）。"
+        },
+        "cacheRead": {
+          "type": "number",
+          "minimum": 0,
+          "description": "缓存读取 token 单价（USD / 1M tokens）。"
+        },
+        "cacheCreation": {
+          "type": "number",
+          "minimum": 0,
+          "description": "缓存创建 token 单价（USD / 1M tokens）。"
+        }
+      }
     },
     "logConfig": {
       "type": "object",

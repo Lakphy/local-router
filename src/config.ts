@@ -73,6 +73,12 @@ export interface RouteTarget {
 export interface ModelCapabilities {
   'image-input'?: boolean;
   reasoning?: boolean;
+  pricing?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheCreation?: number;
+  };
 }
 
 export interface PluginConfig {

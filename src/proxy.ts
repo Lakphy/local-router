@@ -10,6 +10,7 @@ import {
   executeJsonResponsePlugins,
   executeRequestPlugins,
 } from './plugin-engine';
+import { extractUsageFromResponse, extractUsageFromStream } from './usage-extract';
 
 export type { PluginPhaseLog } from './plugin';
 
@@ -112,6 +113,10 @@ function buildLogEvent(
     provider_request_id: null,
     error_type: null,
     error_message: null,
+    usage_input_tokens: null,
+    usage_output_tokens: null,
+    usage_cache_read_tokens: null,
+    usage_cache_creation_tokens: null,
     ...overrides,
   };
 }
@@ -279,6 +284,7 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
       const tempPath = createTempStreamCapturePath(logMeta.requestId);
       let streamBytes = 0;
       let streamFile: string | null = null;
+      let streamUsage = { inputTokens: null as number | null, outputTokens: null as number | null, cacheReadTokens: null as number | null, cacheCreationTokens: null as number | null };
 
       try {
         const reader = logStream.getReader();
@@ -288,6 +294,12 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
           if (done) break;
           streamBytes += value.byteLength;
           await appendTempStreamCapture(tempPath, value);
+        }
+
+        // Extract usage from the captured stream before flushing
+        const sseText = await readFile(tempPath, 'utf-8').catch(() => '');
+        if (sseText) {
+          streamUsage = extractUsageFromStream(logMeta.routeType, sseText);
         }
 
         streamFile = await flushTempCaptureToLogger(tempPath, logMeta.requestId, dateStr, logger);
@@ -302,6 +314,10 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
             response_headers: sseHeaders,
             stream_bytes: streamBytes,
             provider_request_id: providerRequestId,
+            usage_input_tokens: streamUsage.inputTokens,
+            usage_output_tokens: streamUsage.outputTokens,
+            usage_cache_read_tokens: streamUsage.cacheReadTokens,
+            usage_cache_creation_tokens: streamUsage.cacheCreationTokens,
             ...(streamFile != null && { stream_file: streamFile }),
             ...(requestBody !== undefined && { request_body: requestBody }),
             ...pluginLogOverrides,
@@ -367,6 +383,8 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
   // 用最终客户端可见的值计算 response_bytes
   const responseBytes = Buffer.byteLength(responseText, 'utf-8');
 
+  const usage = extractUsageFromResponse(logMeta.routeType, responseText);
+
   const eventOverrides: Partial<LogEvent> = {
     upstream_status: upstreamRes.status,
     content_type_res: contentTypeRes,
@@ -374,6 +392,10 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
     response_bytes: responseBytes,
     provider_request_id: providerRequestId,
     ...pluginLogOverrides,
+    usage_input_tokens: usage.inputTokens,
+    usage_output_tokens: usage.outputTokens,
+    usage_cache_read_tokens: usage.cacheReadTokens,
+    usage_cache_creation_tokens: usage.cacheCreationTokens,
   };
 
   if (requestBody !== undefined) {
