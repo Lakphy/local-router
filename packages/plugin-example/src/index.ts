@@ -1,4 +1,4 @@
-import type { PluginDefinition, Plugin, PluginContext } from '../../../src/plugin';
+import type { PluginDefinition, Plugin, PluginContext } from '@lakphy/local-router/plugin';
 
 interface ExamplePluginParams {
   tag?: string;

@@ -7,7 +7,7 @@
  * 配置示例（零参数）：
  *   { "package": "./packages/plugin-adapter-anthropic-to-completions" }
  */
-import type { PluginDefinition, Plugin } from '../../../src/plugin';
+import type { PluginDefinition, Plugin } from '@lakphy/local-router/plugin';
 import { convertRequestBody } from '../../plugin-protocol-adapter/src/convert-request';
 import { convertResponseBody } from '../../plugin-protocol-adapter/src/convert-response';
 import { createStreamTransform } from '../../plugin-protocol-adapter/src/convert-stream';

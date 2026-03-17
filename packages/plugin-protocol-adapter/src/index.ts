@@ -7,7 +7,7 @@
  * 配置示例：
  *   { "package": "./packages/plugin-protocol-adapter", "params": { "targetFormat": "openai-completions" } }
  */
-import type { PluginDefinition, Plugin } from '../../../src/plugin';
+import type { PluginDefinition, Plugin } from '@lakphy/local-router/plugin';
 import { type ProtocolFormat, convertRequestBody } from './convert-request';
 import { convertResponseBody } from './convert-response';
 import { createStreamTransform } from './convert-stream';
