@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LogConfig } from './config';
+import type { PluginPhaseLog } from './plugin';
 
 export interface LogEvent {
   request_id: string;
@@ -32,6 +33,13 @@ export interface LogEvent {
   request_body?: unknown;
   response_body?: string;
   stream_file?: string;
+  // 插件相关日志字段
+  plugins_request?: PluginPhaseLog[];
+  request_body_after_plugins?: unknown;
+  request_url_after_plugins?: string;
+  plugins_response?: PluginPhaseLog[];
+  response_body_before_plugins?: string;
+  response_body_after_plugins?: string;
 }
 
 export interface LogMeta {

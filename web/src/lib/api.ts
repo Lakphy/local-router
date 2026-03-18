@@ -285,6 +285,14 @@ export interface LogEventDetail {
     streamCaptured: boolean;
     truncatedHints: string[];
   };
+  plugins?: {
+    request?: Array<{ name: string; package: string; params: Record<string, unknown> }>;
+    response?: Array<{ name: string; package: string; params: Record<string, unknown> }>;
+    requestBodyAfterPlugins?: unknown;
+    requestUrlAfterPlugins?: string;
+    responseBodyBeforePlugins?: string;
+    responseBodyAfterPlugins?: string;
+  };
   rawEvent: unknown;
   location: {
     date: string;

@@ -127,6 +127,14 @@ export interface LogEventDetail {
     streamCaptured: boolean;
     truncatedHints: string[];
   };
+  plugins?: {
+    request?: Array<{ name: string; package: string; params: Record<string, unknown> }>;
+    response?: Array<{ name: string; package: string; params: Record<string, unknown> }>;
+    requestBodyAfterPlugins?: unknown;
+    requestUrlAfterPlugins?: string;
+    responseBodyBeforePlugins?: string;
+    responseBodyAfterPlugins?: string;
+  };
   rawEvent: unknown;
   location: {
     date: string;
@@ -538,6 +546,26 @@ async function buildLogEventDetail(
     event.stream_file
   );
 
+  // 构建插件相关信息
+  const hasPluginData =
+    event.plugins_request ||
+    event.plugins_response ||
+    event.request_body_after_plugins !== undefined ||
+    event.request_url_after_plugins !== undefined ||
+    event.response_body_before_plugins !== undefined ||
+    event.response_body_after_plugins !== undefined;
+
+  const pluginsSection = hasPluginData
+    ? {
+        request: event.plugins_request,
+        response: event.plugins_response,
+        requestBodyAfterPlugins: event.request_body_after_plugins,
+        requestUrlAfterPlugins: event.request_url_after_plugins,
+        responseBodyBeforePlugins: event.response_body_before_plugins,
+        responseBodyAfterPlugins: event.response_body_after_plugins,
+      }
+    : undefined;
+
   return {
     id,
     summary: {
@@ -589,6 +617,7 @@ async function buildLogEventDetail(
         ...(streamWarning ? [streamWarning] : []),
       ],
     },
+    ...(pluginsSection && { plugins: pluginsSection }),
     rawEvent: event,
     location,
   };

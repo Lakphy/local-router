@@ -5,7 +5,8 @@ import { generateText, streamText } from 'ai';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import type { Hono } from 'hono';
 import { createAppFromConfigPath } from '../../src/index';
 import { config } from '../setup';
 
@@ -150,7 +151,7 @@ function mockUpstreamResponse(url: string, init?: RequestInit): Response | null 
   return null;
 }
 
-function createLocalFetch(app: ReturnType<typeof createAppFromConfigPath>) {
+function createLocalFetch(app: Hono) {
   const localFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url =
       typeof input === 'string'
@@ -198,21 +199,25 @@ describe('AI SDK v6 Provider 解析兼容性', () => {
 
   writeFileSync(tempConfigPath, JSON.stringify(compatConfig, null, 2), 'utf-8');
 
-  const compatApp = createAppFromConfigPath(tempConfigPath);
-  const localFetch = createLocalFetch(compatApp);
+  let localFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   const originalFetch = globalThis.fetch;
 
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
-    const mocked = mockUpstreamResponse(url, init);
-    if (mocked) return mocked;
-    return originalFetch(input, init);
-  }) as typeof globalThis.fetch;
+  beforeAll(async () => {
+    const compatApp = await createAppFromConfigPath(tempConfigPath);
+    localFetch = createLocalFetch(compatApp);
+
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      const mocked = mockUpstreamResponse(url, init);
+      if (mocked) return mocked;
+      return originalFetch(input, init);
+    }) as typeof globalThis.fetch;
+  });
 
   afterAll(() => {
     globalThis.fetch = originalFetch;

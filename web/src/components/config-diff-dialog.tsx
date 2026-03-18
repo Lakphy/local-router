@@ -1,4 +1,5 @@
 import ReactDiffViewer from 'react-diff-viewer-continued';
+import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -26,6 +27,7 @@ function getDialogDescription(mode: DiffMode): string {
 }
 
 export function ConfigDiffDialog() {
+  const { theme } = useTheme();
   const config = useConfigStore((s) => s.config);
   const draft = useConfigStore((s) => s.draft);
   const saving = useConfigStore((s) => s.saving);
@@ -77,7 +79,7 @@ export function ConfigDiffDialog() {
                 showDiffOnly={false}
                 leftTitle="已保存配置"
                 rightTitle="当前草稿"
-                useDarkTheme={false}
+                useDarkTheme={theme === 'dark'}
                 styles={{
                   variables: {
                     light: {

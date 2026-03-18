@@ -1,7 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import type { Hono } from 'hono';
 import { createAppFromConfigPath } from '../../src/index';
 
 function isStreamRequest(init?: RequestInit): boolean {
@@ -182,21 +183,25 @@ describe('聊天代理接口', () => {
     'utf-8'
   );
 
-  const app = createAppFromConfigPath(tempConfigPath);
+  let app: Hono;
   const originalFetch = globalThis.fetch;
 
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
+  beforeAll(async () => {
+    app = await createAppFromConfigPath(tempConfigPath);
 
-    const mocked = mockUpstreamResponse(url, init);
-    if (mocked) return mocked;
-    return originalFetch(input, init);
-  }) as typeof globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+
+      const mocked = mockUpstreamResponse(url, init);
+      if (mocked) return mocked;
+      return originalFetch(input, init);
+    }) as typeof globalThis.fetch;
+  });
 
   afterAll(() => {
     globalThis.fetch = originalFetch;

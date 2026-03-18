@@ -1,0 +1,9 @@
+{
+  "name": "local-router-plugin-adapter-responses-to-anthropic",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "peerDependencies": {
+    "@lakphy/local-router": "workspace:*"
+  }
+}

@@ -10,12 +10,18 @@ export interface ModelCapabilities {
   reasoning?: boolean;
 }
 
+export interface PluginConfig {
+  package: string;
+  params?: Record<string, unknown>;
+}
+
 export interface ProviderConfig {
   type: ProviderType;
   base: string;
   apiKey: string;
   proxy?: string;
   models: Record<string, ModelCapabilities>;
+  plugins?: PluginConfig[];
 }
 
 export interface LogConfig {

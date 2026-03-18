@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import type { ConfigStore } from '../config-store';
 import type { LogMeta } from '../logger';
 import { collectHeaders } from '../logger';
+import type { PluginManager } from '../plugin-loader';
 import type { AuthType } from '../proxy';
 import { proxyRequest } from '../proxy';
 import type { RouteTarget } from '../config';
@@ -11,6 +12,7 @@ export interface ModelRoutingOptions {
   store: ConfigStore;
   authType: AuthType;
   buildTargetUrl: (providerBase: string) => string;
+  pluginManager?: PluginManager;
 }
 
 function resolveRoute(
@@ -33,7 +35,7 @@ function resolveRoute(
  * 支持热重载而不影响已进入 proxyRequest 的 in-flight 请求。
  */
 export function createModelRoutingHandler(options: ModelRoutingOptions) {
-  const { routeType, store, authType, buildTargetUrl } = options;
+  const { routeType, store, authType, buildTargetUrl, pluginManager } = options;
 
   return async (c: Context) => {
     const config = store.get();
@@ -83,6 +85,9 @@ export function createModelRoutingHandler(options: ModelRoutingOptions) {
       requestHeaders: collectHeaders(c.req.raw.headers),
     };
 
+    const plugins = pluginManager?.getPlugins(target.provider) ?? [];
+    const pluginConfigs = pluginManager?.getLoadedPlugins(target.provider) ?? [];
+
     return proxyRequest(c, {
       targetUrl,
       apiKey: provider.apiKey,
@@ -90,6 +95,12 @@ export function createModelRoutingHandler(options: ModelRoutingOptions) {
       authType,
       body,
       logMeta,
+      plugins: plugins.length > 0 ? plugins : undefined,
+      pluginConfigs: pluginConfigs.length > 0 ? pluginConfigs.map((lp) => ({
+        name: lp.definition.name,
+        package: lp.config.package,
+        params: lp.config.params ?? {},
+      })) : undefined,
     });
   };
 }

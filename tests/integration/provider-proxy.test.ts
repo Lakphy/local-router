@@ -1,7 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import type { Hono } from 'hono';
 import { createAppFromConfigPath } from '../../src/index';
 
 describe('Provider 级代理转发', () => {
@@ -52,22 +53,26 @@ describe('Provider 级代理转发', () => {
     'utf-8'
   );
 
-  const app = createAppFromConfigPath(tempConfigPath);
+  let app: Hono;
   const originalFetch = globalThis.fetch;
   const capturedCalls: Array<{ url: string; proxy: unknown }> = [];
 
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
-    const proxy = (init as RequestInit & { proxy?: unknown } | undefined)?.proxy;
-    capturedCalls.push({ url, proxy });
+  beforeAll(async () => {
+    app = await createAppFromConfigPath(tempConfigPath);
 
-    return Response.json({ ok: true, url });
-  }) as typeof globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      const proxy = (init as RequestInit & { proxy?: unknown } | undefined)?.proxy;
+      capturedCalls.push({ url, proxy });
+
+      return Response.json({ ok: true, url });
+    }) as typeof globalThis.fetch;
+  });
 
   afterAll(() => {
     globalThis.fetch = originalFetch;

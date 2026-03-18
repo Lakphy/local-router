@@ -1,8 +1,20 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
-import JsonView from '@uiw/react-json-view';
 import { ArrowLeft, ChevronDown, Copy } from 'lucide-react';
-import { type CSSProperties, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { JsonBlock } from '@/components/log-detail/json-block';
+import { MetaItem } from '@/components/log-detail/meta-item';
+import { PluginPipelineSection } from '@/components/log-detail/plugin-pipeline-section';
+import { RequestResponseFlowSections } from '@/components/log-detail/request-response-flow-sections';
+import { RouteFlowCard } from '@/components/log-detail/route-flow-card';
+import { StreamContentBlock } from '@/components/log-detail/stream-content-block';
+import {
+  buildCurlCommand,
+  captureReason,
+  formatDateTime,
+  getInterfaceType,
+  prettyJson,
+} from '@/components/log-detail/utils';
 import { ChatHistoryCard } from '@/components/logs/chat-history-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,180 +26,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchLogEventDetail, type LogEventDetail } from '@/lib/api';
 import { parseChatHistory } from '@/lib/log-chat-history/parse-chat-history';
-import { cn } from '@/lib/utils';
-
-function prettyJson(value: unknown): string {
-  return JSON.stringify(value, null, 2);
-}
-
-const JSON_VIEW_STYLE = {
-  '--w-rjv-font-family':
-    'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-  '--w-rjv-background-color': 'transparent',
-  '--w-rjv-color': 'var(--foreground)',
-  '--w-rjv-border-left': '1px dashed var(--border)',
-  '--w-rjv-line-color': 'var(--border)',
-  '--w-rjv-arrow-color': 'var(--muted-foreground)',
-  '--w-rjv-info-color': 'var(--muted-foreground)',
-  '--w-rjv-curlybraces-color': 'var(--foreground)',
-  '--w-rjv-brackets-color': 'var(--foreground)',
-  '--w-rjv-colon-color': 'var(--muted-foreground)',
-  '--w-rjv-key-string': 'var(--foreground)',
-  '--w-rjv-type-string-color': 'oklch(0.52 0.16 250)',
-  '--w-rjv-type-int-color': 'oklch(0.56 0.16 145)',
-  '--w-rjv-type-float-color': 'oklch(0.56 0.16 145)',
-  '--w-rjv-type-boolean-color': 'oklch(0.58 0.19 30)',
-  '--w-rjv-type-null-color': 'var(--muted-foreground)',
-  '--w-rjv-type-undefined-color': 'var(--muted-foreground)',
-  '--w-rjv-type-date-color': 'oklch(0.56 0.16 145)',
-  '--w-rjv-type-url-color': 'oklch(0.52 0.16 250)',
-} as CSSProperties;
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-}
-
-function captureReason(detail: LogEventDetail): string | null {
-  if (detail.capture.bodyPolicy === 'off') {
-    return 'Body 记录策略为 off，未记录请求/响应 body。';
-  }
-  if (detail.capture.bodyPolicy === 'full') {
-    return 'Body 记录策略为 full，当前展示的是完整内容。';
-  }
-  if (detail.capture.bodyPolicy === 'masked') {
-    return '当前配置中的 bodyPolicy=masked 会按完整内容展示。';
-  }
-  return null;
-}
-
-function getInterfaceType(routeType: string): string {
-  if (routeType.startsWith('openai')) return 'openai';
-  if (routeType.startsWith('anthropic')) return 'anthropic';
-  return routeType;
-}
-
-function shellEscape(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
-function stringifyBody(body: unknown): string | null {
-  if (body == null) return null;
-  return typeof body === 'string' ? body : JSON.stringify(body, null, 2);
-}
-
-function looksLikeJsonContentType(contentType?: string | null): boolean {
-  if (!contentType) return false;
-  const normalized = contentType.toLowerCase();
-  return normalized.includes('application/json') || normalized.includes('+json');
-}
-
-function looksLikeJsonText(text: string): boolean {
-  const trimmed = text.trim();
-  if (!trimmed) return false;
-  return /^(?:\{|\[|"|-?\d|true$|false$|null$)/.test(trimmed);
-}
-
-function parseJsonCandidate(
-  value: unknown,
-  contentType?: string | null
-): {
-  kind: 'empty' | 'json-tree' | 'json-primitive' | 'text';
-  value?: unknown;
-  text?: string;
-} {
-  if (value == null) return { kind: 'empty' };
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return { kind: 'text', text: value };
-    }
-
-    if (looksLikeJsonContentType(contentType) || looksLikeJsonText(trimmed)) {
-      try {
-        const parsed = JSON.parse(trimmed) as unknown;
-        if (parsed !== null && typeof parsed === 'object') {
-          return { kind: 'json-tree', value: parsed };
-        }
-        return { kind: 'json-primitive', value: parsed };
-      } catch {
-        return { kind: 'text', text: value };
-      }
-    }
-
-    return { kind: 'text', text: value };
-  }
-
-  if (typeof value === 'object') {
-    return { kind: 'json-tree', value };
-  }
-
-  return { kind: 'json-primitive', value };
-}
-
-function normalizeHeaders(
-  headers: Record<string, string>,
-  mode: 'local-router' | 'provider'
-): Array<[string, string]> {
-  const filtered = Object.entries(headers).filter(([key]) => {
-    const lower = key.toLowerCase();
-    if (lower === 'content-length' || lower === 'host') return false;
-    if (mode === 'provider' && (lower === 'authorization' || lower === 'x-api-key')) return false;
-    return true;
-  });
-
-  return filtered.sort(([a], [b]) => a.localeCompare(b));
-}
-
-function getProviderAuthHeader(routeType: string): [string, string] {
-  if (routeType.startsWith('anthropic')) {
-    return ['x-api-key', '<PROVIDER_API_KEY>'];
-  }
-  return ['Authorization', 'Bearer <PROVIDER_API_KEY>'];
-}
-
-function restoreLocalRouterBody(detail: LogEventDetail): unknown {
-  const body = detail.request.requestBody;
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
-  return {
-    ...body,
-    model: detail.summary.modelIn,
-  };
-}
-
-function buildCurlCommand(detail: LogEventDetail, mode: 'local-router' | 'provider'): string {
-  const url =
-    mode === 'provider'
-      ? detail.upstream.targetUrl
-      : new URL(detail.request.path, window.location.origin).toString();
-  const body = mode === 'provider' ? detail.request.requestBody : restoreLocalRouterBody(detail);
-  const bodyText = stringifyBody(body);
-  const headers = normalizeHeaders(detail.request.requestHeaders ?? {}, mode);
-  const authHeader = mode === 'provider' ? getProviderAuthHeader(detail.summary.routeType) : null;
-
-  const lines = ['curl', `  -X ${detail.request.method}`, `  ${shellEscape(url)}`];
-
-  headers.forEach(([key, value]) => {
-    lines.push(`  -H ${shellEscape(`${key}: ${value}`)}`);
-  });
-
-  if (mode === 'provider' && authHeader) {
-    lines.push(`  -H ${shellEscape(`${authHeader[0]}: ${authHeader[1]}`)}`);
-    lines.push(`  -H ${shellEscape('accept-encoding: identity')}`);
-  }
-
-  if (bodyText !== null) {
-    lines.push(`  --data-raw ${shellEscape(bodyText)}`);
-  }
-
-  return `${lines.join(' \\\n')}`;
-}
 
 export function LogDetailPage() {
   const navigate = useNavigate();
@@ -268,6 +109,10 @@ export function LogDetailPage() {
     );
   }
 
+  const hasPlugins = Boolean(
+    detail.plugins && (detail.plugins.request?.length || detail.plugins.response?.length)
+  );
+
   return (
     <Tabs defaultValue="overview" className="space-y-2">
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-background px-3 py-2">
@@ -283,6 +128,7 @@ export function LogDetailPage() {
         <TabsList variant="line" className="h-auto shrink-0">
           <TabsTrigger value="overview">概览</TabsTrigger>
           <TabsTrigger value="request-response">请求 / 响应</TabsTrigger>
+          {hasPlugins ? <TabsTrigger value="plugins">插件</TabsTrigger> : null}
           <TabsTrigger value="session-tracing">会话 / 追踪</TabsTrigger>
           <TabsTrigger value="raw">Raw</TabsTrigger>
         </TabsList>
@@ -391,45 +237,14 @@ export function LogDetailPage() {
       </TabsContent>
 
       <TabsContent value="request-response" className="mt-0 space-y-4">
-        <section className="rounded-lg border bg-background">
-          <div className="border-b px-3 py-3">
-            <h3 className="text-base font-semibold">Request</h3>
-          </div>
-          <div className="space-y-3 px-3 py-3">
-            <div className="grid gap-2 text-sm sm:grid-cols-3">
-              <MetaItem label="method" value={detail.request.method} />
-              <MetaItem label="path" value={detail.request.path} mono />
-              <MetaItem label="content-type" value={detail.request.contentType ?? '-'} mono />
-            </div>
-            <HeadersTableBlock title="headers" headers={detail.request.requestHeaders} />
-            <JsonBlock
-              title="body"
-              value={detail.request.requestBody}
-              contentType={detail.request.contentType}
-              emptyText="无请求 body 或未采集。"
-            />
-          </div>
-        </section>
-
-        <section className="rounded-lg border bg-background">
-          <div className="border-b px-3 py-3">
-            <h3 className="text-base font-semibold">Response</h3>
-          </div>
-          <div className="space-y-3 px-3 py-3">
-            <div className="grid gap-2 text-sm sm:grid-cols-2">
-              <MetaItem label="upstream_status" value={String(detail.response.upstreamStatus)} />
-              <MetaItem label="content-type" value={detail.response.contentType ?? '-'} mono />
-            </div>
-            <HeadersTableBlock title="headers" headers={detail.response.responseHeaders} />
-            <JsonBlock
-              title="body"
-              value={detail.response.responseBody}
-              contentType={detail.response.contentType}
-              emptyText="无响应 body 或未采集。"
-            />
-          </div>
-        </section>
+        <RequestResponseFlowSections detail={detail} />
       </TabsContent>
+
+      {hasPlugins ? (
+        <TabsContent value="plugins" className="mt-0 space-y-4">
+          <PluginPipelineSection detail={detail} />
+        </TabsContent>
+      ) : null}
 
       <TabsContent value="session-tracing" className="mt-0 space-y-4">
         {parsedChatHistory ? <ChatHistoryCard parsed={parsedChatHistory} /> : null}
@@ -477,314 +292,5 @@ export function LogDetailPage() {
         </section>
       </TabsContent>
     </Tabs>
-  );
-}
-
-function MetaItem({
-  label,
-  value,
-  mono = false,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="rounded-md border bg-muted/20 px-3 py-2">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={`mt-1 break-all ${mono ? 'font-mono text-xs' : 'text-sm'}`}>{value}</div>
-    </div>
-  );
-}
-
-function FlowPill({
-  label,
-  value,
-  mono = false,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="rounded-md border bg-background/90 px-2 py-1">
-      <div className="text-[11px] leading-4 text-muted-foreground">{label}</div>
-      <div className={`mt-0.5 break-all text-xs ${mono ? 'font-mono' : ''}`}>{value}</div>
-    </div>
-  );
-}
-
-function RouteFlowCard({
-  interfaceType,
-  routeType,
-  modelIn,
-  provider,
-  modelOut,
-  routeRuleKey,
-}: {
-  interfaceType: string;
-  routeType: string;
-  modelIn: string;
-  provider: string;
-  modelOut: string;
-  routeRuleKey: string;
-}) {
-  return (
-    <div className="rounded-xl border bg-linear-to-br from-muted/20 to-muted/40 p-3">
-      <div className="grid gap-3 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
-        <div className="space-y-2 rounded-lg border bg-background/70 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-sm font-medium">入站请求</div>
-            <Badge variant="outline">IN</Badge>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <FlowPill label="接口类型" value={interfaceType} />
-            <FlowPill label="routeType" value={routeType} mono />
-          </div>
-          <FlowPill label="原始模型（model_in）" value={modelIn} mono />
-        </div>
-
-        <div className="flex flex-col items-center justify-center gap-1 py-1">
-          <div className="hidden h-0.5 w-16 bg-border lg:block" />
-          <div className="rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground">
-            路由匹配并改写
-          </div>
-          <div className="text-xl leading-none text-muted-foreground">→</div>
-          <div className="hidden h-0.5 w-16 bg-border lg:block" />
-        </div>
-
-        <div className="space-y-2 rounded-lg border bg-background/70 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-sm font-medium">出站转发</div>
-            <Badge variant="outline">OUT</Badge>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <FlowPill label="目标 provider" value={provider} />
-            <FlowPill label="命中规则" value={routeRuleKey} mono />
-          </div>
-          <FlowPill label="路由模型（model_out）" value={modelOut} mono />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type StreamLine =
-  | { type: 'json'; lineNo: number; value: unknown }
-  | { type: 'raw'; lineNo: number; value: string };
-
-function parseStreamLines(content: string): StreamLine[] {
-  const rawLines = content.split('\n');
-  const lines: StreamLine[] = [];
-
-  rawLines.forEach((rawLine, index) => {
-    const trimmed = rawLine.trim();
-    if (!trimmed) return;
-
-    const lineNo = index + 1;
-
-    if (trimmed.startsWith('data:')) {
-      const payload = trimmed.slice(5).trim();
-      if (!payload) return;
-      try {
-        lines.push({ type: 'json', lineNo, value: JSON.parse(payload) });
-      } catch {
-        lines.push({ type: 'raw', lineNo, value: trimmed });
-      }
-      return;
-    }
-
-    try {
-      lines.push({ type: 'json', lineNo, value: JSON.parse(trimmed) });
-    } catch {
-      lines.push({ type: 'raw', lineNo, value: trimmed });
-    }
-  });
-
-  return lines;
-}
-
-function StreamContentBlock({
-  title,
-  content,
-  emptyText,
-}: {
-  title: string;
-  content: string | null;
-  emptyText?: string;
-}) {
-  const lines = useMemo(() => (content ? parseStreamLines(content) : []), [content]);
-
-  const header = (
-    <div className="flex items-center justify-between gap-2">
-      <div className="text-xs text-muted-foreground">{title}</div>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={!content}
-        onClick={async () => {
-          if (!content) return;
-          await navigator.clipboard.writeText(content);
-          toast.success('已复制 stream content');
-        }}
-      >
-        <Copy className="h-3.5 w-3.5" />
-        复制
-      </Button>
-    </div>
-  );
-
-  if (!content || lines.length === 0) {
-    return (
-      <div className="space-y-1">
-        {header}
-        <pre className="max-h-[320px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs">
-          {emptyText ?? '-'}
-        </pre>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-1">
-      {header}
-      <div className="max-h-[420px] space-y-2 overflow-auto rounded-md border bg-muted/30 p-3">
-        {lines.map((line) => (
-          <div
-            key={`${line.lineNo}-${line.type}`}
-            className="space-y-1 rounded-md border bg-background/80 p-2"
-          >
-            <div className="text-[11px] text-muted-foreground">line {line.lineNo}</div>
-            <StructuredDataBlock
-              value={line.type === 'json' ? line.value : line.value}
-              className="max-h-[280px] bg-muted/40"
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function StructuredDataBlock({
-  value,
-  contentType,
-  emptyText,
-  className,
-}: {
-  value: unknown;
-  contentType?: string | null;
-  emptyText?: string;
-  className?: string;
-}) {
-  const parsed = useMemo(() => parseJsonCandidate(value, contentType), [contentType, value]);
-
-  if (parsed.kind === 'empty') {
-    return (
-      <div
-        className={cn('rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground', className)}
-      >
-        {emptyText ?? '-'}
-      </div>
-    );
-  }
-
-  if (parsed.kind === 'json-tree') {
-    return (
-      <div
-        className={cn(
-          'max-h-[320px] overflow-auto rounded-md border bg-muted/20 p-3 text-xs',
-          className
-        )}
-      >
-        <JsonView
-          value={parsed.value as object}
-          displayDataTypes={false}
-          displayObjectSize={false}
-          enableClipboard={false}
-          shortenTextAfterLength={0}
-          shouldExpandNodeInitially={(_, { level }) => level < 2}
-          style={JSON_VIEW_STYLE}
-        />
-      </div>
-    );
-  }
-
-  const text =
-    parsed.kind === 'json-primitive'
-      ? prettyJson(parsed.value)
-      : (parsed.text ?? prettyJson(value));
-
-  return (
-    <pre
-      className={cn(
-        'max-h-[320px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap break-all',
-        className
-      )}
-    >
-      {text}
-    </pre>
-  );
-}
-
-function JsonBlock({
-  title,
-  value,
-  contentType,
-  emptyText,
-}: {
-  title: string;
-  value: unknown;
-  contentType?: string | null;
-  emptyText?: string;
-}) {
-  return (
-    <div className="space-y-1">
-      <div className="text-xs text-muted-foreground">{title}</div>
-      <StructuredDataBlock value={value} contentType={contentType} emptyText={emptyText} />
-    </div>
-  );
-}
-
-function HeadersTableBlock({
-  title,
-  headers,
-  emptyText,
-}: {
-  title: string;
-  headers: Record<string, string> | null | undefined;
-  emptyText?: string;
-}) {
-  const entries = useMemo(() => {
-    if (!headers) return [];
-    return Object.entries(headers).sort(([a], [b]) => a.localeCompare(b));
-  }, [headers]);
-
-  return (
-    <div className="space-y-1">
-      <div className="text-xs text-muted-foreground">{title}</div>
-      {entries.length === 0 ? (
-        <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
-          {emptyText ?? '-'}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-md border bg-muted/10">
-          <Table className="text-xs">
-            <TableBody>
-              {entries.map(([key, value]) => (
-                <TableRow key={key} className="hover:bg-transparent">
-                  <TableCell className="w-[240px] max-w-[240px] align-top font-mono text-[11px] text-muted-foreground whitespace-normal break-all">
-                    {key}
-                  </TableCell>
-                  <TableCell className="align-top font-mono whitespace-normal break-all">
-                    {value}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-    </div>
   );
 }

@@ -1,5 +1,5 @@
 import { createDefaultAppFromProcessArgs } from './index';
 
-const app = createDefaultAppFromProcessArgs();
+const app = await createDefaultAppFromProcessArgs();
 
 export default app;

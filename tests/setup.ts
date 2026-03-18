@@ -24,7 +24,7 @@ function createDefaultTestConfigPath(): string {
 
 export const configPath = process.env.TEST_CONFIG_PATH ?? createDefaultTestConfigPath();
 export const config = loadConfig(configPath);
-export const app = createAppFromConfigPath(configPath);
+export const app = await createAppFromConfigPath(configPath);
 
 export interface RequestResult {
   res: Response;

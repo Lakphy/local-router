@@ -1,5 +1,5 @@
-import { Eye, EyeOff } from 'lucide-react';
-import { useState } from 'react';
+import { Eye, EyeOff, Plus, Trash2, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +11,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import type { ProviderConfig, ProviderType } from '@/types/config';
+import { Textarea } from '@/components/ui/textarea';
+import type { PluginConfig, ProviderConfig, ProviderType } from '@/types/config';
 import { ModelEditor } from './model-editor';
 
 const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
@@ -125,6 +126,231 @@ export function ProviderForm({ name, config, isNew, onChange }: ProviderFormProp
       <Separator />
 
       <ModelEditor models={config.models} onChange={(models) => onChange({ ...config, models })} />
+
+      <Separator />
+
+      <PluginListEditor
+        plugins={config.plugins ?? []}
+        onChange={(plugins) => onChange({ ...config, plugins: plugins.length > 0 ? plugins : undefined })}
+      />
+    </div>
+  );
+}
+
+interface PluginEntry {
+  id: string;
+  config: PluginConfig;
+}
+
+let nextPluginId = 0;
+function generatePluginId(): string {
+  return `plugin-${Date.now()}-${++nextPluginId}`;
+}
+
+function PluginListEditor({
+  plugins,
+  onChange,
+}: {
+  plugins: PluginConfig[];
+  onChange: (plugins: PluginConfig[]) => void;
+}) {
+  const [entries, setEntries] = useState<PluginEntry[]>(() =>
+    plugins.map((config) => ({ id: generatePluginId(), config }))
+  );
+
+  // 当外部 plugins 数组变化（如父组件 reset/save 后写回），全量同步
+  const prevPluginsRef = useRef(plugins);
+  useEffect(() => {
+    if (prevPluginsRef.current !== plugins) {
+      prevPluginsRef.current = plugins;
+      // 全量比较：长度不同或任意项内容不同时重建 entries
+      const needsSync =
+        plugins.length !== entries.length ||
+        plugins.some(
+          (p, i) =>
+            p.package !== entries[i]?.config.package ||
+            JSON.stringify(p.params) !== JSON.stringify(entries[i]?.config.params)
+        );
+      if (needsSync) {
+        setEntries(plugins.map((config) => ({ id: generatePluginId(), config })));
+      }
+    }
+  }, [plugins, entries.length]);
+
+  function commitEntries(next: PluginEntry[]) {
+    setEntries(next);
+    onChange(next.map((e) => e.config));
+  }
+
+  function handleAdd() {
+    commitEntries([...entries, { id: generatePluginId(), config: { package: '' } }]);
+  }
+
+  function handleRemove(index: number) {
+    commitEntries(entries.filter((_, i) => i !== index));
+  }
+
+  function handleUpdate(index: number, updated: PluginConfig) {
+    const next = [...entries];
+    next[index] = { ...next[index], config: updated };
+    commitEntries(next);
+  }
+
+  function handleMoveUp(index: number) {
+    if (index <= 0) return;
+    const next = [...entries];
+    [next[index - 1], next[index]] = [next[index], next[index - 1]];
+    commitEntries(next);
+  }
+
+  function handleMoveDown(index: number) {
+    if (index >= entries.length - 1) return;
+    const next = [...entries];
+    [next[index], next[index + 1]] = [next[index + 1], next[index]];
+    commitEntries(next);
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <Label>插件列表</Label>
+          <p className="text-xs text-muted-foreground">
+            数组顺序决定洋葱模型层级：请求正序、响应逆序执行
+          </p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={handleAdd}>
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          添加插件
+        </Button>
+      </div>
+
+      {entries.length === 0 && (
+        <p className="text-xs text-muted-foreground py-2">暂无插件配置</p>
+      )}
+
+      {entries.map((entry, index) => (
+        <PluginItemEditor
+          key={entry.id}
+          plugin={entry.config}
+          index={index}
+          total={entries.length}
+          onUpdate={(updated) => handleUpdate(index, updated)}
+          onRemove={() => handleRemove(index)}
+          onMoveUp={() => handleMoveUp(index)}
+          onMoveDown={() => handleMoveDown(index)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PluginItemEditor({
+  plugin,
+  index,
+  total,
+  onUpdate,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+}: {
+  plugin: PluginConfig;
+  index: number;
+  total: number;
+  onUpdate: (updated: PluginConfig) => void;
+  onRemove: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}) {
+  const [paramsText, setParamsText] = useState(
+    plugin.params ? JSON.stringify(plugin.params, null, 2) : ''
+  );
+  const [paramsError, setParamsError] = useState<string | null>(null);
+
+  // 当 plugin.params 从外部变化时同步本地编辑态
+  const prevParamsRef = useRef(plugin.params);
+  useEffect(() => {
+    if (prevParamsRef.current !== plugin.params) {
+      prevParamsRef.current = plugin.params;
+      setParamsText(plugin.params ? JSON.stringify(plugin.params, null, 2) : '');
+      setParamsError(null);
+    }
+  }, [plugin.params]);
+
+  function handleParamsChange(text: string) {
+    setParamsText(text);
+    if (!text.trim()) {
+      setParamsError(null);
+      onUpdate({ ...plugin, params: undefined });
+      return;
+    }
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        setParamsError('params 必须是 JSON 对象');
+        return;
+      }
+      setParamsError(null);
+      onUpdate({ ...plugin, params: parsed });
+    } catch {
+      setParamsError('JSON 格式不正确');
+    }
+  }
+
+  return (
+    <div className="rounded-lg border p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground shrink-0">#{index + 1}</span>
+        <Input
+          value={plugin.package}
+          onChange={(e) => onUpdate({ ...plugin, package: e.target.value })}
+          placeholder="npm-package-name 或 ./local/path.ts"
+          className="font-mono text-xs h-8"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={onMoveUp}
+          disabled={index <= 0}
+        >
+          <ChevronUp className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={onMoveDown}
+          disabled={index >= total - 1}
+        >
+          <ChevronDown className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
+          onClick={onRemove}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs">params (JSON)</Label>
+        <Textarea
+          value={paramsText}
+          onChange={(e) => handleParamsChange(e.target.value)}
+          placeholder='{ "key": "value" }'
+          className="font-mono text-xs min-h-[60px]"
+          rows={3}
+        />
+        {paramsError && (
+          <p className="text-xs text-destructive">{paramsError}</p>
+        )}
+      </div>
     </div>
   );
 }

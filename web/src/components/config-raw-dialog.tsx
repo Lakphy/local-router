@@ -1,4 +1,5 @@
 import Editor from '@monaco-editor/react';
+import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -18,6 +19,7 @@ const MODEL_URI = 'inmemory://model/local-router-config.json';
 const SCHEMA_URI = 'local-router://schema/config.schema.json';
 
 export function ConfigRawDialog() {
+  const { theme } = useTheme();
   const config = useConfigStore((s) => s.config);
   const saving = useConfigStore((s) => s.saving);
   const applying = useConfigStore((s) => s.applying);
@@ -108,6 +110,7 @@ export function ConfigRawDialog() {
         <div className="h-[calc(92vh-210px)] overflow-hidden rounded-lg border">
           <Editor
             height="100%"
+            theme={theme === 'dark' ? 'vs-dark' : 'light'}
             language="json"
             value={rawValue}
             onChange={(next) => setRawValue(next ?? '')}

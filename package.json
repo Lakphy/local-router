@@ -1,6 +1,6 @@
 {
   "name": "@lakphy/local-router",
-  "version": "0.3.3",
+  "version": "0.4.0-beta.4",
   "packageManager": "bun@1.2.0",
   "workspaces": [
     "web"
@@ -16,10 +16,14 @@
   "bin": {
     "local-router": "dist/cli.js"
   },
+  "exports": {
+    "./plugin": "./src/plugin.ts"
+  },
   "files": [
     "dist",
     "config.schema.json",
-    "README.md"
+    "README.md",
+    "src/plugin.ts"
   ],
   "bun": {
     "target": "bun",

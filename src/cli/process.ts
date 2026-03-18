@@ -108,7 +108,7 @@ export async function runServerProcess(opts: {
 
   let running: RunningServer;
   try {
-    running = startServer({
+    running = await startServer({
       configPath: ensured.path,
       host,
       port,

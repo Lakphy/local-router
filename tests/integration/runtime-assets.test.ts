@@ -34,7 +34,7 @@ describe('runtime bundled assets', () => {
     );
 
     process.chdir(workdir);
-    const runtime = createAppRuntimeFromConfigPath(configPath);
+    const runtime = await createAppRuntimeFromConfigPath(configPath);
 
     try {
       const schemaRes = await runtime.app.request('http://localhost/api/config/schema');

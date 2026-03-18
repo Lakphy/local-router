@@ -167,6 +167,13 @@
           "additionalProperties": {
             "$ref": "#/$defs/modelCapabilities"
           }
+        },
+        "plugins": {
+          "type": "array",
+          "description": "插件列表。数组顺序决定洋葱模型的外→内层级：请求阶段正序执行，响应阶段逆序执行。",
+          "items": {
+            "$ref": "#/$defs/pluginConfig"
+          }
         }
       }
     },
@@ -257,6 +264,25 @@
           "minimum": 1,
           "default": 10485760,
           "description": "单个流式请求最大记录字节数（默认约 10MB = 10485760 字节）。超出部分将被截断并在文件末尾追加 [TRUNCATED] 标记。设置合理上限可防止异常长响应撑爆磁盘。"
+        }
+      }
+    },
+    "pluginConfig": {
+      "type": "object",
+      "description": "单个插件的配置。package 指定 npm 包名、本地路径或远程 URL，params 为传递给 create() 的参数对象。",
+      "additionalProperties": false,
+      "required": ["package"],
+      "properties": {
+        "package": {
+          "type": "string",
+          "minLength": 1,
+          "description": "插件包名、本地路径或远程 URL。以 ./ 或 ../ 或 / 开头视为本地文件（相对于配置文件目录解析）；以 http:// 或 https:// 开头视为远程 URL（运行时下载后加载）；否则作为 npm 包名通过 import() 加载。支持 .js 和 .ts 文件。",
+          "examples": ["local-router-plugin-audit", "./plugins/content-filter.ts", "https://example.com/plugins/my-plugin.js"]
+        },
+        "params": {
+          "type": "object",
+          "description": "传递给插件 create() 方法的参数对象。",
+          "additionalProperties": true
         }
       }
     }

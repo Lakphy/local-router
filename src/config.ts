@@ -75,12 +75,21 @@ export interface ModelCapabilities {
   reasoning?: boolean;
 }
 
+export interface PluginConfig {
+  /** npm 包名、本地路径（./relative 或 /absolute）或远程 URL（http:// 或 https://） */
+  package: string;
+  /** 传递给 create() 的参数 */
+  params?: Record<string, unknown>;
+}
+
 export interface ProviderConfig {
   type: ProviderType;
   base: string;
   apiKey: string;
   proxy?: string;
   models: Record<string, ModelCapabilities>;
+  /** 插件列表，数组顺序 = 洋葱模型外→内层级 */
+  plugins?: PluginConfig[];
 }
 
 export interface LogConfig {
