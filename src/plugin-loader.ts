@@ -118,6 +118,7 @@ export class PluginManager {
 
   private async loadPluginsForProvider(
     providerName: string,
+    providerConfig: ProviderConfig,
     pluginConfigs: PluginConfig[]
   ): Promise<{ loaded: LoadedPlugin[]; failures: { provider: string; package: string; error: string }[] }> {
     const loaded: LoadedPlugin[] = [];
@@ -126,7 +127,14 @@ export class PluginManager {
     for (const config of pluginConfigs) {
       try {
         const definition = await importPlugin(config.package, this.configDir);
-        const instance = await definition.create(config.params ?? {});
+        const params = { ...(config.params ?? {}) };
+
+        // 通用 protocol-adapter 在未显式配置 targetFormat 时，默认使用 provider.type。
+        if (definition.name === 'protocol-adapter' && params.targetFormat === undefined) {
+          params.targetFormat = providerConfig.type;
+        }
+
+        const instance = await definition.create(params);
         loaded.push({ config, definition, instance });
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
@@ -159,6 +167,7 @@ export class PluginManager {
       if (providerConfig.plugins && providerConfig.plugins.length > 0) {
         const { loaded, failures } = await this.loadPluginsForProvider(
           providerName,
+          providerConfig,
           providerConfig.plugins
         );
         allFailures.push(...failures);
