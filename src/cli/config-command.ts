@@ -6,6 +6,15 @@ import JSON5 from 'json5';
 import type { AppConfig, ProviderConfig, ProviderType } from '../config';
 import { loadConfig, resolveConfigPath } from '../config';
 import { validateConfigOrThrow } from '../config-validate';
+import {
+  buildImportResult,
+  ccsDbExists,
+  getDefaultCCSDbPath,
+  isAlreadyImported,
+  mergeImportIntoConfig,
+  readCCSProviders,
+  validateString,
+} from '../ccs-import';
 import { cleanupIfStale, checkHealth } from './process';
 import { readRuntimeState } from './runtime';
 
@@ -73,6 +82,7 @@ Commands:
   config resolve --entry <entry> --model <request-model> [--json] [--config <path>]
   config validate [--config <path>]
   config apply
+  config import-ccs [--db <path>] [--config <path>] [--yes]
 `);
 }
 
@@ -412,6 +422,111 @@ async function handleApply(): Promise<void> {
   console.log(`配置已应用: ${state.baseUrl}`);
 }
 
+function maskApiKeyShort(k: string): string {
+  if (k.length <= 8) return '***';
+  return `${k.slice(0, 4)}***${k.slice(-4)}`;
+}
+
+async function handleImportCCS(args: string[]): Promise<void> {
+  const parsed = parseArgs({
+    args,
+    options: {
+      db: { type: 'string' },
+      config: { type: 'string' },
+      yes: { type: 'boolean', default: false },
+    },
+    allowPositionals: true,
+    strict: false,
+  });
+
+  const dbPath = parsed.values.db ?? getDefaultCCSDbPath();
+  if (!ccsDbExists(dbPath)) {
+    throw new Error(`CCS 数据库不存在: ${dbPath}\n请确认已安装并使用过 CC Switch (https://github.com/farion1231/cc-switch)`);
+  }
+
+  const ccsProviders = readCCSProviders(dbPath);
+  if (ccsProviders.length === 0) {
+    console.log('CCS 数据库中未找到 Claude 供应商配置');
+    return;
+  }
+
+  console.log(`\n找到 ${ccsProviders.length} 个 CCS 供应商:\n`);
+  ccsProviders.forEach((p, i) => {
+    const env = (p.settingsConfig?.env ?? {}) as Record<string, unknown>;
+    const base = validateString(env.ANTHROPIC_BASE_URL) || '(未设置)';
+    const current = p.isCurrent ? ' [当前活跃]' : '';
+    console.log(`  ${i + 1}) ${p.name}${current}`);
+    console.log(`     Base URL: ${base}`);
+  });
+  console.log();
+
+  let selected = ccsProviders;
+  if (!parsed.values.yes) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      const answer = await rl.question('请输入要导入的序号（逗号分隔，* 导入全部，q 取消）: ');
+      const trimmed = answer.trim();
+      if (trimmed === 'q' || trimmed === '') {
+        console.log('已取消');
+        return;
+      }
+      if (trimmed !== '*') {
+        const indices = trimmed
+          .split(',')
+          .map((s) => Number.parseInt(s.trim(), 10) - 1)
+          .filter((i) => !Number.isNaN(i) && i >= 0 && i < ccsProviders.length);
+        selected = indices.map((i) => ccsProviders[i]!);
+        if (selected.length === 0) {
+          console.log('未选择有效的供应商');
+          return;
+        }
+      }
+    } finally {
+      rl.close();
+    }
+  }
+
+  const { path, config } = readConfig(parsed.values.config);
+
+  // Filter out providers already imported (by base + apiKey match)
+  const notYetImported = selected.filter((p) => !isAlreadyImported(config, p));
+  if (notYetImported.length < selected.length) {
+    const skippedCount = selected.length - notYetImported.length;
+    console.log(`跳过 ${skippedCount} 个已导入的供应商（base + apiKey 匹配）`);
+  }
+  if (notYetImported.length === 0) {
+    console.log('所有选中的供应商均已导入，无需重复操作');
+    return;
+  }
+
+  const existingKeys = new Set(Object.keys(config.providers));
+  const importResult = buildImportResult(notYetImported, existingKeys);
+
+  if (Object.keys(importResult.providers).length === 0) {
+    console.log('没有可导入的供应商（可能缺少 Base URL 配置）');
+    return;
+  }
+
+  console.log('\n将要导入以下供应商:');
+  for (const [key, p] of Object.entries(importResult.providers)) {
+    console.log(`  - ${key} (${p.type}) -> ${p.base}`);
+    console.log(`    API Key: ${maskApiKeyShort(p.apiKey)}`);
+    console.log(`    Models: ${Object.keys(p.models).join(', ') || '(无)'}`);
+  }
+  console.log();
+
+  const { imported, skipped } = mergeImportIntoConfig(config, importResult);
+  saveConfig(path, config);
+
+  if (imported.length > 0) {
+    console.log(`已导入 ${imported.length} 个供应商: ${imported.join(', ')}`);
+  }
+  if (skipped.length > 0) {
+    console.log(`跳过 ${skipped.length} 个已存在的供应商: ${skipped.join(', ')}`);
+  }
+  console.log(`配置已保存: ${path}`);
+}
+
 export async function cmdConfig(args: string[]): Promise<void> {
   const [group, ...rest] = args;
   switch (group) {
@@ -429,6 +544,9 @@ export async function cmdConfig(args: string[]): Promise<void> {
       return;
     case 'apply':
       await handleApply();
+      return;
+    case 'import-ccs':
+      await handleImportCCS(rest);
       return;
     case 'help':
     case '--help':

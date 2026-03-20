@@ -31,6 +31,7 @@ Commands:
   logs [--follow] [--lines <n>]
   init [--config <path>] [--force]
   config <subcommand> [...args]
+  config import-ccs [--db <path>] [--config <path>] [--yes]
   get-route --type <route-type> [--model-alias <alias>] [--config <path>]
   health
   version

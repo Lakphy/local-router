@@ -17,21 +17,21 @@ export interface RunningServer {
 const DEFAULT_IDLE_TIMEOUT_SECONDS = 0;
 
 function resolveIdleTimeoutSeconds(explicit?: number): number {
+  let value = DEFAULT_IDLE_TIMEOUT_SECONDS;
+
   if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit >= 0) {
-    return explicit;
+    value = explicit;
+  } else {
+    const fromEnv = process.env.LOCAL_ROUTER_IDLE_TIMEOUT;
+    if (fromEnv) {
+      const parsed = Number.parseInt(fromEnv, 10);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        value = parsed;
+      }
+    }
   }
 
-  const fromEnv = process.env.LOCAL_ROUTER_IDLE_TIMEOUT;
-  if (!fromEnv) {
-    return DEFAULT_IDLE_TIMEOUT_SECONDS;
-  }
-
-  const parsed = Number.parseInt(fromEnv, 10);
-  if (Number.isFinite(parsed) && parsed >= 0) {
-    return parsed;
-  }
-
-  return DEFAULT_IDLE_TIMEOUT_SECONDS;
+  return Math.min(value, 255);
 }
 
 export async function startServer(options: StartServerOptions): Promise<RunningServer> {
