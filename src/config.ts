@@ -73,6 +73,12 @@ export interface RouteTarget {
 export interface ModelCapabilities {
   'image-input'?: boolean;
   reasoning?: boolean;
+  pricing?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheCreation?: number;
+  };
 }
 
 export interface PluginConfig {
@@ -80,6 +86,16 @@ export interface PluginConfig {
   package: string;
   /** 传递给 create() 的参数 */
   params?: Record<string, unknown>;
+}
+
+export interface BalanceConfig {
+  request: {
+    url: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+  };
+  extractor: string;
 }
 
 export interface ProviderConfig {
@@ -90,6 +106,7 @@ export interface ProviderConfig {
   models: Record<string, ModelCapabilities>;
   /** 插件列表，数组顺序 = 洋葱模型外→内层级 */
   plugins?: PluginConfig[];
+  balance?: BalanceConfig;
 }
 
 export interface LogConfig {

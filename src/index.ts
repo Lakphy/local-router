@@ -3,14 +3,16 @@ import { dirname, resolve } from 'node:path';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { streamText } from 'ai';
 import { swaggerUI } from '@hono/swagger-ui';
+import { streamText } from 'ai';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
+import { queryAllBalances } from './balance-query';
 import type { AppConfig, RouteTarget } from './config';
 import { parseConfigPath, resolveLogBaseDir } from './config';
 import { ConfigStore } from './config-store';
+import { validateConfigOrThrow } from './config-validate';
 import { CryptoSession } from './crypto';
 import { getLogMetrics, isLogMetricsWindow } from './log-metrics';
 import {
@@ -34,7 +36,7 @@ import { createAnthropicMessagesRoutes } from './routes/anthropic-messages';
 import { createOpenaiCompletionsRoutes } from './routes/openai-completions';
 import { createOpenaiResponsesRoutes } from './routes/openai-responses';
 import { getBundledSchemaPath, getBundledWebRoot } from './runtime-assets';
-import { validateConfigOrThrow } from './config-validate';
+import { getUsageMetrics, isUsageMetricsWindow } from './usage-metrics';
 
 type CleanupFn = () => void;
 
@@ -186,7 +188,11 @@ function normalizeChatProxyBaseUrl(
   return normalized;
 }
 
-function createChatProxyModel(providerName: string, providerConfig: AppConfig['providers'][string], model: string) {
+function createChatProxyModel(
+  providerName: string,
+  providerConfig: AppConfig['providers'][string],
+  model: string
+) {
   const common = {
     apiKey: providerConfig.apiKey,
     baseURL: normalizeChatProxyBaseUrl(providerConfig.type, providerConfig.base),
@@ -239,9 +245,12 @@ function createAdminApiRoutes(store: ConfigStore, pluginManager: PluginManager, 
     return record.session;
   };
 
-  const sessionSweepTimer = setInterval(() => {
-    pruneExpiredCryptoSessions();
-  }, Math.max(5_000, Math.floor(CRYPTO_SESSION_TTL_MS / 2)));
+  const sessionSweepTimer = setInterval(
+    () => {
+      pruneExpiredCryptoSessions();
+    },
+    Math.max(5_000, Math.floor(CRYPTO_SESSION_TTL_MS / 2))
+  );
   sessionSweepTimer.unref?.();
   registerCleanup?.(() => {
     clearInterval(sessionSweepTimer);
@@ -274,7 +283,10 @@ function createAdminApiRoutes(store: ConfigStore, pluginManager: PluginManager, 
       return c.json({ serverPublicKey, sessionId });
     } catch (err) {
       session.dispose();
-      return c.json({ error: `握手失败: ${err instanceof Error ? err.message : String(err)}` }, 400);
+      return c.json(
+        { error: `握手失败: ${err instanceof Error ? err.message : String(err)}` },
+        400
+      );
     }
   });
 
@@ -389,7 +401,11 @@ function createAdminApiRoutes(store: ConfigStore, pluginManager: PluginManager, 
       return c.json({ error: 'provider 和 model 为必填字段' }, 400);
     }
 
-    if (!Array.isArray(body.messages) || body.messages.length === 0 || !body.messages.every(isChatProxyMessage)) {
+    if (
+      !Array.isArray(body.messages) ||
+      body.messages.length === 0 ||
+      !body.messages.every(isChatProxyMessage)
+    ) {
       return c.json({ error: 'messages 必须是非空消息数组' }, 400);
     }
 
@@ -452,6 +468,42 @@ function createAdminApiRoutes(store: ConfigStore, pluginManager: PluginManager, 
         { error: `读取日志统计失败: ${err instanceof Error ? err.message : err}` },
         500
       );
+    }
+  });
+
+  api.get('/usage', async (c) => {
+    const config = store.get();
+    const window = c.req.query('window') ?? '24h';
+    const refresh = c.req.query('refresh') === '1';
+
+    if (!isUsageMetricsWindow(window)) {
+      return c.json({ error: 'window 参数仅支持 1h | 6h | 24h' }, 400);
+    }
+
+    try {
+      const metrics = await getUsageMetrics({
+        config,
+        logConfig: config.log,
+        window,
+        refresh,
+      });
+      return c.json(metrics);
+    } catch (err) {
+      return c.json(
+        { error: `读取用量统计失败: ${err instanceof Error ? err.message : err}` },
+        500
+      );
+    }
+  });
+
+  api.get('/balance', async (c) => {
+    const config = store.get();
+
+    try {
+      const result = await queryAllBalances(config.providers);
+      return c.json(result);
+    } catch (err) {
+      return c.json({ error: `查询余额失败: ${err instanceof Error ? err.message : err}` }, 500);
     }
   });
 
@@ -756,7 +808,9 @@ function createAdminApiRoutes(store: ConfigStore, pluginManager: PluginManager, 
             if (closed) return;
 
             if (data.items.length > 0) {
-              const maxTs = Math.max(...data.items.map((item) => Date.parse(item.ts)).filter(Number.isFinite));
+              const maxTs = Math.max(
+                ...data.items.map((item) => Date.parse(item.ts)).filter(Number.isFinite)
+              );
               if (Number.isFinite(maxTs)) {
                 lastSeenTs = Math.max(lastSeenTs, maxTs + 1);
               }
