@@ -142,6 +142,7 @@ export interface UsageMetricsResponse {
     cacheCreationTokens: number;
     cost: number;
     pricing: { input: number; output: number; cacheRead: number; cacheCreation: number } | null;
+    usageAvailable: boolean;
   }>;
   series: Array<{
     ts: string;

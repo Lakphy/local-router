@@ -27,6 +27,15 @@ function extractOpenAICompletionsUsage(usage: Record<string, unknown>): Extracte
   };
 }
 
+function extractGeminiUsage(usageMetadata: Record<string, unknown>): ExtractedUsage {
+  return {
+    inputTokens: safeInt(usageMetadata.promptTokenCount),
+    outputTokens: safeInt(usageMetadata.candidatesTokenCount),
+    cacheReadTokens: safeInt(usageMetadata.cachedContentTokenCount),
+    cacheCreationTokens: null,
+  };
+}
+
 function extractAnthropicUsage(usage: Record<string, unknown>): ExtractedUsage {
   return {
     inputTokens: safeInt(usage.input_tokens),
@@ -49,14 +58,24 @@ export function extractUsageFromResponse(routeType: string, responseText: string
   try {
     const json = JSON.parse(responseText) as Record<string, unknown>;
     const usage = json.usage as Record<string, unknown> | undefined;
-    if (!usage || typeof usage !== 'object') return EMPTY_USAGE;
 
     switch (routeType) {
-      case 'openai-completions':
-        return extractOpenAICompletionsUsage(usage);
+      case 'openai-completions': {
+        if (usage && typeof usage === 'object') {
+          return extractOpenAICompletionsUsage(usage);
+        }
+        // Gemini fallback
+        const usageMetadata = json.usageMetadata as Record<string, unknown> | undefined;
+        if (usageMetadata && typeof usageMetadata === 'object') {
+          return extractGeminiUsage(usageMetadata);
+        }
+        return EMPTY_USAGE;
+      }
       case 'anthropic-messages':
+        if (!usage || typeof usage !== 'object') return EMPTY_USAGE;
         return extractAnthropicUsage(usage);
       case 'openai-responses':
+        if (!usage || typeof usage !== 'object') return EMPTY_USAGE;
         return extractOpenAIResponsesUsage(usage);
       default:
         return EMPTY_USAGE;
@@ -100,6 +119,18 @@ function extractOpenAICompletionsStreamUsage(sseRawText: string): ExtractedUsage
       const usage = json.usage as Record<string, unknown> | undefined;
       if (usage && typeof usage === 'object') {
         return extractOpenAICompletionsUsage(usage);
+      }
+    } catch {}
+  }
+  // Gemini fallback（找 usageMetadata）
+  for (let i = events.length - 1; i >= 0; i--) {
+    const { data } = events[i];
+    if (data === '[DONE]') continue;
+    try {
+      const json = JSON.parse(data) as Record<string, unknown>;
+      const usageMetadata = json.usageMetadata as Record<string, unknown> | undefined;
+      if (usageMetadata && typeof usageMetadata === 'object') {
+        return extractGeminiUsage(usageMetadata);
       }
     } catch {}
   }

@@ -19,6 +19,12 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useUsageStore } from '@/stores/usage-store';
 import type { UsageMetricsWindow } from '@/types/config';
 
@@ -32,6 +38,11 @@ function formatCost(n: number): string {
   if (n === 0) return '$0.00';
   if (n < 0.01) return `$${n.toFixed(6)}`;
   return `$${n.toFixed(2)}`;
+}
+
+function formatTokensOrNA(n: number, usageAvailable: boolean): string {
+  if (!usageAvailable) return '-';
+  return formatTokens(n);
 }
 
 const trendChartConfig = {
@@ -291,15 +302,34 @@ export function UsagePage() {
                         <td className="px-3 py-2 font-mono text-xs">{row.provider}</td>
                         <td className="px-3 py-2 font-mono text-xs">{row.model}</td>
                         <td className="px-3 py-2 text-right">{row.requests}</td>
-                        <td className="px-3 py-2 text-right">{formatTokens(row.inputTokens)}</td>
-                        <td className="px-3 py-2 text-right">{formatTokens(row.outputTokens)}</td>
                         <td className="px-3 py-2 text-right">
-                          {formatTokens(row.cacheReadTokens)}
+                          {formatTokensOrNA(row.inputTokens, row.usageAvailable)}
                         </td>
                         <td className="px-3 py-2 text-right">
-                          {formatTokens(row.cacheCreationTokens)}
+                          {formatTokensOrNA(row.outputTokens, row.usageAvailable)}
                         </td>
-                        <td className="px-3 py-2 text-right">{formatCost(row.cost)}</td>
+                        <td className="px-3 py-2 text-right">
+                          {formatTokensOrNA(row.cacheReadTokens, row.usageAvailable)}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {formatTokensOrNA(row.cacheCreationTokens, row.usageAvailable)}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {!row.usageAvailable ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-help text-muted-foreground">—</span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  此 provider 未提供用量数据，无法估算费用
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : (
+                            formatCost(row.cost)
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-right text-xs text-muted-foreground">
                           {row.pricing ? `$${row.pricing.input}/$${row.pricing.output}` : '-'}
                         </td>
