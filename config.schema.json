@@ -115,8 +115,8 @@
     },
     "providerConfig": {
       "type": "object",
-      "description": "单个 provider 的配置。",
-      "additionalProperties": false,
+      "description": "单个 provider 的配置。（additionalProperties 暂为 true 以兼容扩展字段，待功能稳定后可收紧为 false）",
+      "additionalProperties": true,
       "required": ["type", "base", "apiKey", "models"],
       "properties": {
         "type": {
@@ -179,8 +179,8 @@
     },
     "modelCapabilities": {
       "type": "object",
-      "description": "模型能力开关。当前已知能力字段为 image-input 与 reasoning；未声明字段默认视为 false 或由上游默认行为决定。",
-      "additionalProperties": false,
+      "description": "模型能力开关。当前已知能力字段为 image-input 与 reasoning；未声明字段默认视为 false 或由上游默认行为决定。（additionalProperties 暂为 true 以兼容扩展字段，待功能稳定后可收紧为 false）",
+      "additionalProperties": true,
       "properties": {
         "image-input": {
           "type": "boolean",
