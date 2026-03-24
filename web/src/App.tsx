@@ -32,6 +32,10 @@ function App() {
   });
   const currentMeta = resolvePageMeta(pathname);
 
+  useEffect(() => {
+    document.title = `${currentMeta.title} | Local Router`;
+  }, [currentMeta.title]);
+
   const loading = useConfigStore((s) => s.loading);
   const error = useConfigStore((s) => s.error);
   const draft = useConfigStore((s) => s.draft);
