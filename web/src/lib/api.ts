@@ -33,8 +33,9 @@ async function withOneShotSession<T>(
     return await action(session);
   } catch (err) {
     const status =
-      typeof err === 'object' && err !== null && 'status' in err ? (err as { status?: number }).status :
-        undefined;
+      typeof err === 'object' && err !== null && 'status' in err
+        ? (err as { status?: number }).status
+        : undefined;
     if (retry401 && status === 401) {
       const retriedSession = await createOneShotSession();
       return action(retriedSession);

@@ -1,7 +1,7 @@
 import { Copy } from 'lucide-react';
+import { DashboardPanel } from '@/components/dashboard/panel';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { DashboardPanel } from '@/components/dashboard/panel';
 
 interface ClientConfigPanelProps {
   endpointLines: string[];

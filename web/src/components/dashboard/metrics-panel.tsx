@@ -1,4 +1,5 @@
 import { BarChart3 } from 'lucide-react';
+import { DashboardPanel } from '@/components/dashboard/panel';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -8,7 +9,6 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DashboardPanel } from '@/components/dashboard/panel';
 import type { LogMetricsResponse, LogMetricsWindow } from '@/types/config';
 
 interface MetricsPanelProps {
@@ -107,7 +107,9 @@ export function MetricsPanel(props: MetricsPanelProps) {
 
           <div className="grid gap-3 lg:grid-cols-3">
             <div className="space-y-2 lg:col-span-2">
-              <div className="text-sm font-medium">请求趋势（最近 {metricsSeries.length} 个时间桶）</div>
+              <div className="text-sm font-medium">
+                请求趋势（最近 {metricsSeries.length} 个时间桶）
+              </div>
               <div className="space-y-1.5">
                 {metricsSeries.map((point) => {
                   const ratio = metrics.summary.totalRequests

@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from '@tanstack/react-router';
 import {
   FileCog,
   FileSearch,
@@ -6,8 +6,9 @@ import {
   MessageSquare,
   Route,
   Server,
+  Settings,
   Users,
-} from "lucide-react";
+} from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -17,32 +18,34 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar";
+} from '@/components/ui/sidebar';
 
 type NavItem = {
   to:
-    | "/dashboard"
-    | "/chat"
-    | "/providers"
-    | "/routes"
-    | "/logs"
-    | "/sessions"
-    | "/logs-settings";
+    | '/dashboard'
+    | '/chat'
+    | '/providers'
+    | '/routes'
+    | '/general-settings'
+    | '/logs'
+    | '/sessions'
+    | '/logs-settings';
   label: string;
   icon: typeof LayoutDashboard;
 };
 
 const OBSERVE_ITEMS: NavItem[] = [
-  { to: "/dashboard", label: "仪表盘", icon: LayoutDashboard },
-  { to: "/chat", label: "聊天面板", icon: MessageSquare },
-  { to: "/logs", label: "日志检索", icon: FileSearch },
-  { to: "/sessions", label: "用户会话", icon: Users },
+  { to: '/dashboard', label: '仪表盘', icon: LayoutDashboard },
+  { to: '/chat', label: '聊天面板', icon: MessageSquare },
+  { to: '/logs', label: '日志检索', icon: FileSearch },
+  { to: '/sessions', label: '用户会话', icon: Users },
 ];
 
 const CONFIG_ITEMS: NavItem[] = [
-  { to: "/providers", label: "供应商配置", icon: Server },
-  { to: "/routes", label: "路由配置", icon: Route },
-  { to: "/logs-settings", label: "日志配置", icon: FileCog },
+  { to: '/general-settings', label: '通用设置', icon: Settings },
+  { to: '/providers', label: '供应商配置', icon: Server },
+  { to: '/routes', label: '路由配置', icon: Route },
+  { to: '/logs-settings', label: '日志配置', icon: FileCog },
 ];
 
 function NavGroup({
@@ -60,10 +63,10 @@ function NavGroup({
       <p
         className="px-2 text-xs text-muted-foreground/60 font-medium tracking-wide select-none overflow-hidden transition-[max-height,opacity,padding] duration-200"
         style={{
-          maxHeight: open ? "2rem" : 0,
+          maxHeight: open ? '2rem' : 0,
           opacity: open ? 1 : 0,
-          paddingTop: open ? "0.75rem" : 0,
-          paddingBottom: open ? "0.25rem" : 0,
+          paddingTop: open ? '0.75rem' : 0,
+          paddingBottom: open ? '0.25rem' : 0,
         }}
       >
         {title}
@@ -73,8 +76,8 @@ function NavGroup({
           {items.map((item) => {
             const isActive =
               pathname === item.to ||
-              (item.to === "/logs" && pathname.startsWith("/logs/")) ||
-              (item.to === "/sessions" && pathname.startsWith("/sessions"));
+              (item.to === '/logs' && pathname.startsWith('/logs/')) ||
+              (item.to === '/sessions' && pathname.startsWith('/sessions'));
             return (
               <SidebarMenuItem key={item.to}>
                 <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>

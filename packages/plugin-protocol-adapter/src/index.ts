@@ -7,11 +7,11 @@
  * 配置示例：
  *   { "package": "./packages/plugin-protocol-adapter", "params": { "targetFormat": "openai-completions" } }
  */
-import type { PluginDefinition, Plugin } from '@lakphy/local-router/plugin';
-import { type ProtocolFormat, convertRequestBody } from './convert-request';
+import type { Plugin, PluginDefinition } from '@lakphy/local-router/plugin';
+import { convertRequestBody, type ProtocolFormat } from './convert-request';
 import { convertResponseBody } from './convert-response';
 import { createStreamTransform } from './convert-stream';
-import { rewriteUrl, convertAuthHeaders, URL_PATH_MAP } from './shared';
+import { convertAuthHeaders, rewriteUrl, URL_PATH_MAP } from './shared';
 
 const VALID_FORMATS = new Set<string>(Object.keys(URL_PATH_MAP));
 
@@ -25,7 +25,7 @@ const definition: PluginDefinition = {
     if (!targetFormat || !VALID_FORMATS.has(targetFormat)) {
       throw new Error(
         `[protocol-adapter] 无效的 targetFormat: "${targetFormat}"。` +
-          `支持的值: ${[...VALID_FORMATS].join(', ')}`,
+          `支持的值: ${[...VALID_FORMATS].join(', ')}`
       );
     }
 
@@ -60,7 +60,7 @@ const definition: PluginDefinition = {
 
       async onError({ ctx, phase, error }) {
         console.error(
-          `[plugin:protocol-adapter] onError phase=${phase} provider=${ctx.provider}: ${error.message}`,
+          `[plugin:protocol-adapter] onError phase=${phase} provider=${ctx.provider}: ${error.message}`
         );
       },
 

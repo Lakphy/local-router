@@ -22,7 +22,10 @@ export function validateConfigOrThrow(config: AppConfig): void {
 
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   addFormats(ajv);
-  const schemaJson = JSON.parse(readFileSync(getBundledSchemaPath(), 'utf-8')) as Record<string, unknown>;
+  const schemaJson = JSON.parse(readFileSync(getBundledSchemaPath(), 'utf-8')) as Record<
+    string,
+    unknown
+  >;
   const validateBySchema = ajv.compile(schemaJson);
   const valid = validateBySchema(config);
   if (!valid) {

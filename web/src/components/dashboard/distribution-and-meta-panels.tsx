@@ -1,13 +1,8 @@
 import { BarChart3, Network } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from '@/components/ui/empty';
-import { Skeleton } from '@/components/ui/skeleton';
 import { DashboardPanel } from '@/components/dashboard/panel';
+import { Badge } from '@/components/ui/badge';
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { ConfigMeta } from '@/types/config';
 
 interface RouteTypeDistributionItem {
@@ -97,7 +92,10 @@ export function ConfigMetaPanel(props: ConfigMetaPanelProps) {
         <>
           <div className="space-y-1">
             <div className="text-xs text-muted-foreground">配置路径</div>
-            <code className="block truncate rounded bg-muted px-2 py-1 text-xs" title={meta.configPath}>
+            <code
+              className="block truncate rounded bg-muted px-2 py-1 text-xs"
+              title={meta.configPath}
+            >
               {meta.configPath}
             </code>
           </div>

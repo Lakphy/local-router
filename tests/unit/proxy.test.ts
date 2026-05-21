@@ -1,7 +1,7 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { LogConfig } from '../../src/config';
 import type { LogEvent, LogMeta } from '../../src/logger';
 import { getLogger, initLogger } from '../../src/logger';

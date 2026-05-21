@@ -445,7 +445,9 @@ export const openAPISpec = {
                           type: 'object',
                           additionalProperties: { type: 'string' },
                         },
-                        requestBody: { type: ['object', 'array', 'string', 'number', 'boolean', 'null'] },
+                        requestBody: {
+                          type: ['object', 'array', 'string', 'number', 'boolean', 'null'],
+                        },
                       },
                     },
                     response: {

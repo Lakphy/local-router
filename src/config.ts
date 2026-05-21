@@ -48,6 +48,14 @@ const DEFAULT_CONFIG = `{
     // },
   },
 
+  // 通用服务设置
+  server: {
+    // 默认关闭局域网访问。开启后，局域网内其他设备可访问本服务。
+    lanAccess: {
+      enabled: false,
+    },
+  },
+
   // 日志配置（可选，不配置则不启用日志记录）
   // log: {
   //   enabled: true,
@@ -106,9 +114,16 @@ export interface LogConfig {
   bodyPolicy?: 'off' | 'masked' | 'full';
 }
 
+export interface ServerConfig {
+  lanAccess?: {
+    enabled?: boolean;
+  };
+}
+
 export interface AppConfig {
   routes: Record<string, Record<string, RouteTarget>>;
   providers: Record<string, ProviderConfig>;
+  server?: ServerConfig;
   log?: LogConfig;
 }
 

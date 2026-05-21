@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
-import { ensureConfigFile, loadConfig, resolveConfigPath, type RouteTarget, writeDefaultConfigFile } from './config';
+import { cmdConfig } from './cli/config-command';
 import {
   checkHealth,
   cleanupIfStale,
@@ -14,7 +14,13 @@ import {
   stopProcess,
 } from './cli/process';
 import { getRuntimeFiles, readRuntimeState, resolveConfigArgPath } from './cli/runtime';
-import { cmdConfig } from './cli/config-command';
+import {
+  ensureConfigFile,
+  loadConfig,
+  type RouteTarget,
+  resolveConfigPath,
+  writeDefaultConfigFile,
+} from './config';
 
 function printHelp(): void {
   console.log(`
@@ -229,7 +235,9 @@ async function cmdGetRoute(args: string[]): Promise<void> {
 
   const routeType = parsed.values.type;
   if (!routeType) {
-    throw new Error('用法: local-router get-route --type <route-type> [--model-alias <alias>] [--config <path>]');
+    throw new Error(
+      '用法: local-router get-route --type <route-type> [--model-alias <alias>] [--config <path>]'
+    );
   }
 
   const configPath = resolveConfigPath(parsed.values.config);

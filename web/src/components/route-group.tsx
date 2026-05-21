@@ -182,7 +182,9 @@ function RuleFlowCard({
   }
 
   const availableModels = getModelsForProvider(target.provider);
-  const groupedProviders = (Object.entries(providers) as [string, AppConfig['providers'][string]][]).reduce(
+  const groupedProviders = (
+    Object.entries(providers) as [string, AppConfig['providers'][string]][]
+  ).reduce(
     (acc, [name, provider]) => {
       acc[provider.type].push(name);
       return acc;

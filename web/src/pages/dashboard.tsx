@@ -7,10 +7,7 @@ import {
 } from '@/components/dashboard/distribution-and-meta-panels';
 import { MetricsPanel } from '@/components/dashboard/metrics-panel';
 import { OverviewStrip } from '@/components/dashboard/overview-strip';
-import {
-  ProviderUsageTablePanel,
-  RouteTypeTablePanel,
-} from '@/components/dashboard/usage-tables';
+import { ProviderUsageTablePanel, RouteTypeTablePanel } from '@/components/dashboard/usage-tables';
 import { useConfigStore } from '@/stores/config-store';
 import { useDashboardStore } from '@/stores/dashboard-store';
 import type { LogMetricsWindow } from '@/types/config';

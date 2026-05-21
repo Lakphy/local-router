@@ -1,5 +1,5 @@
-import { Badge } from '@/components/ui/badge';
 import { FlowPill } from '@/components/log-detail/flow-pill';
+import { Badge } from '@/components/ui/badge';
 
 interface RouteFlowCardProps {
   interfaceType: string;

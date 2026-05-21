@@ -1,7 +1,7 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { Hono } from 'hono';
 import { createAppFromConfigPath } from '../../src/index';
 
@@ -62,12 +62,8 @@ describe('Provider 级代理转发', () => {
 
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url =
-        typeof input === 'string'
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url;
-      const proxy = (init as RequestInit & { proxy?: unknown } | undefined)?.proxy;
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      const proxy = (init as (RequestInit & { proxy?: unknown }) | undefined)?.proxy;
       capturedCalls.push({ url, proxy });
 
       return Response.json({ ok: true, url });

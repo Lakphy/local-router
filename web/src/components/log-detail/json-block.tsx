@@ -1,8 +1,8 @@
 import { Copy } from 'lucide-react';
 import { useMemo } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
 import { StructuredDataBlock } from '@/components/log-detail/structured-data-block';
+import { Button } from '@/components/ui/button';
 
 interface JsonBlockProps {
   title: string;

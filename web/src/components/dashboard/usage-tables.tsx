@@ -1,4 +1,5 @@
 import { Route, Server } from 'lucide-react';
+import { DashboardPanel } from '@/components/dashboard/panel';
 import { Badge } from '@/components/ui/badge';
 import {
   Empty,
@@ -17,7 +18,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { DashboardPanel } from '@/components/dashboard/panel';
 
 interface ProviderUsageRow {
   provider: string;
@@ -42,7 +42,10 @@ interface RouteTypeTablePanelProps {
   totalRules: number;
 }
 
-export function ProviderUsageTablePanel({ hasConfig, providerUsageRows }: ProviderUsageTablePanelProps) {
+export function ProviderUsageTablePanel({
+  hasConfig,
+  providerUsageRows,
+}: ProviderUsageTablePanelProps) {
   return (
     <DashboardPanel title="Provider 使用概览" description="按路由规则统计 provider 被引用次数">
       {!hasConfig ? (

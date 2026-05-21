@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 function runCli(args: string[]): { exitCode: number; stdout: string; stderr: string } {
   const proc = Bun.spawnSync(['bun', 'run', 'src/cli.ts', ...args], {

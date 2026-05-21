@@ -20,7 +20,7 @@ export function rewriteUrl(url: string, from: ProtocolFormat, to: ProtocolFormat
   if (url.includes(fromPath)) {
     return url.replace(fromPath, toPath);
   }
-  const fromSuffix = fromPath.split('/').pop()!;
+  const fromSuffix = fromPath.split('/').pop() ?? fromPath;
   const idx = url.lastIndexOf(`/${fromSuffix}`);
   if (idx !== -1) {
     return url.slice(0, idx) + toPath;
@@ -30,11 +30,12 @@ export function rewriteUrl(url: string, from: ProtocolFormat, to: ProtocolFormat
 
 // ─── 认证头转换 ────────────────────────────────────────────────────────────────
 
-export function convertAuthHeaders(headers: Headers, from: ProtocolFormat, to: ProtocolFormat): void {
-  if (
-    from === 'anthropic-messages' &&
-    (to === 'openai-completions' || to === 'openai-responses')
-  ) {
+export function convertAuthHeaders(
+  headers: Headers,
+  from: ProtocolFormat,
+  to: ProtocolFormat
+): void {
+  if (from === 'anthropic-messages' && (to === 'openai-completions' || to === 'openai-responses')) {
     const apiKey = headers.get('x-api-key');
     if (apiKey) {
       headers.delete('x-api-key');

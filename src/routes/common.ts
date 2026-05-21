@@ -1,11 +1,11 @@
 import type { Context } from 'hono';
+import type { RouteTarget } from '../config';
 import type { ConfigStore } from '../config-store';
 import type { LogMeta } from '../logger';
 import { collectHeaders } from '../logger';
 import type { PluginManager } from '../plugin-loader';
 import type { AuthType } from '../proxy';
 import { proxyRequest } from '../proxy';
-import type { RouteTarget } from '../config';
 
 export interface ModelRoutingOptions {
   routeType: string;
@@ -96,11 +96,14 @@ export function createModelRoutingHandler(options: ModelRoutingOptions) {
       body,
       logMeta,
       plugins: plugins.length > 0 ? plugins : undefined,
-      pluginConfigs: pluginConfigs.length > 0 ? pluginConfigs.map((lp) => ({
-        name: lp.definition.name,
-        package: lp.config.package,
-        params: lp.config.params ?? {},
-      })) : undefined,
+      pluginConfigs:
+        pluginConfigs.length > 0
+          ? pluginConfigs.map((lp) => ({
+              name: lp.definition.name,
+              package: lp.config.package,
+              params: lp.config.params ?? {},
+            }))
+          : undefined,
     });
   };
 }

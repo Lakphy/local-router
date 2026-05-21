@@ -52,11 +52,7 @@ export class CryptoSession {
     if (!this.aesKey) throw new Error('密钥尚未派生');
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const encoded = new TextEncoder().encode(plaintext);
-    const ciphertext = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv },
-      this.aesKey,
-      encoded
-    );
+    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, this.aesKey, encoded);
     return {
       iv: base64Encode(iv.buffer),
       data: base64Encode(ciphertext),
@@ -67,11 +63,7 @@ export class CryptoSession {
     if (!this.aesKey) throw new Error('密钥尚未派生');
     const iv = new Uint8Array(base64Decode(payload.iv));
     const ciphertext = base64Decode(payload.data);
-    const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      this.aesKey,
-      ciphertext
-    );
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, this.aesKey, ciphertext);
     return new TextDecoder().decode(decrypted);
   }
 }

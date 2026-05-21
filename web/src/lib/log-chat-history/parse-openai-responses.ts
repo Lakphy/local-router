@@ -1,14 +1,7 @@
 import type { LogEventDetail } from '../api';
-import type { NormalizedChatMessage, NormalizedContentBlock, RouteParseResult } from './types';
 import { parseSseFrames } from './parse-sse';
-import {
-  asArray,
-  asString,
-  ensureObject,
-  isRecord,
-  normalizeRole,
-  safeJsonParse,
-} from './utils';
+import type { NormalizedChatMessage, NormalizedContentBlock, RouteParseResult } from './types';
+import { asArray, asString, ensureObject, isRecord, normalizeRole, safeJsonParse } from './utils';
 
 function normalizeResponsesInputItem(item: unknown): NormalizedChatMessage | null {
   const input = ensureObject(item);
@@ -68,7 +61,10 @@ function normalizeResponsesInputItem(item: unknown): NormalizedChatMessage | nul
   };
 }
 
-function parseOpenAIResponsesRequest(requestBody: unknown, warnings: string[]): NormalizedChatMessage[] {
+function parseOpenAIResponsesRequest(
+  requestBody: unknown,
+  warnings: string[]
+): NormalizedChatMessage[] {
   const body = ensureObject(requestBody);
   if (!body) {
     warnings.push('OpenAI responses request body is missing or invalid.');
@@ -95,7 +91,10 @@ function parseOpenAIResponsesRequest(requestBody: unknown, warnings: string[]): 
   return messages;
 }
 
-function parseResponseOutputItems(output: unknown[], source: 'response' | 'stream'): NormalizedChatMessage[] {
+function parseResponseOutputItems(
+  output: unknown[],
+  source: 'response' | 'stream'
+): NormalizedChatMessage[] {
   const blocks: NormalizedContentBlock[] = [];
 
   for (const rawItem of output) {
@@ -169,7 +168,10 @@ function parseResponseOutputItems(output: unknown[], source: 'response' | 'strea
   ];
 }
 
-function parseOpenAIResponsesResponse(responseBody: string | null, warnings: string[]): NormalizedChatMessage[] {
+function parseOpenAIResponsesResponse(
+  responseBody: string | null,
+  warnings: string[]
+): NormalizedChatMessage[] {
   if (!responseBody) {
     warnings.push('OpenAI responses non-stream response body is empty.');
     return [];
@@ -205,13 +207,19 @@ function parseOpenAIResponsesResponse(responseBody: string | null, warnings: str
 
 interface ResponsesStreamAccumulator {
   text: string;
-  functionCalls: Map<string, { name?: string; argumentsRaw: string; parsed?: unknown; partial: boolean }>;
+  functionCalls: Map<
+    string,
+    { name?: string; argumentsRaw: string; parsed?: unknown; partial: boolean }
+  >;
   rawItems: unknown[];
   model?: string;
   status?: string;
 }
 
-function parseOpenAIResponsesStream(streamContent: string | null, warnings: string[]): {
+function parseOpenAIResponsesStream(
+  streamContent: string | null,
+  warnings: string[]
+): {
   messages: NormalizedChatMessage[];
   streamEventCount: number;
   partial: boolean;

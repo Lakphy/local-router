@@ -1,10 +1,6 @@
 import { create } from 'zustand';
+import { applyConfig as apiApplyConfig, saveConfig as apiSaveConfig, fetchConfig } from '@/lib/api';
 import type { AppConfig } from '@/types/config';
-import {
-  fetchConfig,
-  saveConfig as apiSaveConfig,
-  applyConfig as apiApplyConfig,
-} from '@/lib/api';
 
 function deepEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);

@@ -1,7 +1,7 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { Hono } from 'hono';
 import { createAppFromConfigPath } from '../../src/index';
 
@@ -191,11 +191,7 @@ describe('聊天代理接口', () => {
 
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url =
-        typeof input === 'string'
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url;
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
       const mocked = mockUpstreamResponse(url, init);
       if (mocked) return mocked;

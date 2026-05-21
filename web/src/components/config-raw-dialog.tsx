@@ -1,6 +1,8 @@
 import Editor from '@monaco-editor/react';
+import { AlertCircle } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -9,8 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { AlertCircle } from 'lucide-react';
 import { useConfigStore } from '@/stores/config-store';
 import { useDialogStore } from '@/stores/dialog-store';
 import type { AppConfig } from '@/types/config';

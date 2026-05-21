@@ -1,14 +1,7 @@
 import type { LogEventDetail } from '../api';
-import type { NormalizedChatMessage, NormalizedContentBlock, RouteParseResult } from './types';
 import { parseSseFrames } from './parse-sse';
-import {
-  asArray,
-  asString,
-  ensureObject,
-  isRecord,
-  normalizeRole,
-  safeJsonParse,
-} from './utils';
+import type { NormalizedChatMessage, NormalizedContentBlock, RouteParseResult } from './types';
+import { asArray, asString, ensureObject, isRecord, normalizeRole, safeJsonParse } from './utils';
 
 function normalizeAnthropicContentBlock(block: unknown): NormalizedContentBlock {
   if (!isRecord(block)) {
@@ -65,7 +58,9 @@ function normalizeAnthropicMessageContent(content: unknown): NormalizedContentBl
   }
 
   const blocks = asArray(content).map(normalizeAnthropicContentBlock);
-  return blocks.length > 0 ? blocks : [{ type: 'unknown', raw: content, label: 'anthropic.content' }];
+  return blocks.length > 0
+    ? blocks
+    : [{ type: 'unknown', raw: content, label: 'anthropic.content' }];
 }
 
 function parseAnthropicRequest(requestBody: unknown, warnings: string[]): NormalizedChatMessage[] {
@@ -120,7 +115,10 @@ function parseAnthropicRequest(requestBody: unknown, warnings: string[]): Normal
   return messages;
 }
 
-function parseAnthropicResponse(responseBody: string | null, warnings: string[]): NormalizedChatMessage[] {
+function parseAnthropicResponse(
+  responseBody: string | null,
+  warnings: string[]
+): NormalizedChatMessage[] {
   if (!responseBody) {
     warnings.push('Anthropic non-stream response body is empty.');
     return [];
@@ -273,7 +271,10 @@ function createAccumulatorFromContentBlock(raw: unknown): StreamBlockAccumulator
   return { kind: 'unknown', raw };
 }
 
-function parseAnthropicStream(streamContent: string | null, warnings: string[]): {
+function parseAnthropicStream(
+  streamContent: string | null,
+  warnings: string[]
+): {
   messages: NormalizedChatMessage[];
   streamEventCount: number;
   partial: boolean;
@@ -405,7 +406,9 @@ function parseAnthropicStream(streamContent: string | null, warnings: string[]):
           acc.partial = false;
         } else {
           acc.partial = true;
-          warnings.push(`Anthropic tool_use JSON parse failed at block ${index}: ${parsedInput.error}`);
+          warnings.push(
+            `Anthropic tool_use JSON parse failed at block ${index}: ${parsedInput.error}`
+          );
         }
       }
       continue;

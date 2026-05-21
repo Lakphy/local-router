@@ -1,9 +1,8 @@
-import { resolve } from 'node:path';
-import react from '@vitejs/plugin-react';
-import { defineConfig } from 'rolldown-vite';
-import path from 'path';
+import path, { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 import { codeInspectorPlugin } from 'code-inspector-plugin';
+import { defineConfig } from 'rolldown-vite';
 
 export default defineConfig({
   plugins: [
@@ -15,7 +14,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      '@': path.resolve(__dirname, './src'),
     },
   },
   base: '/admin/',

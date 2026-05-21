@@ -1,5 +1,5 @@
-import type { LogEventDetail } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
+import type { LogEventDetail } from '@/lib/api';
 
 interface PluginPipelineSectionProps {
   detail: LogEventDetail;
@@ -7,6 +7,10 @@ interface PluginPipelineSectionProps {
 
 export function PluginPipelineSection({ detail }: PluginPipelineSectionProps) {
   const plugins = detail.plugins;
+  const pluginKey = (
+    phase: string,
+    plugin: { name: string; package: string; params: Record<string, unknown> }
+  ) => `${phase}-${plugin.name}-${plugin.package}-${JSON.stringify(plugin.params)}`;
 
   if (!plugins || (!plugins.request?.length && !plugins.response?.length)) {
     return null;
@@ -27,8 +31,8 @@ export function PluginPipelineSection({ detail }: PluginPipelineSectionProps) {
                 <Badge variant="outline" className="text-xs">
                   用户请求
                 </Badge>
-                {plugins.request.map((plugin, index) => (
-                  <div key={`req-${plugin.name}-${index}`} className="flex items-center gap-1.5">
+                {plugins.request.map((plugin) => (
+                  <div key={pluginKey('req', plugin)} className="flex items-center gap-1.5">
                     <span className="text-muted-foreground">→</span>
                     <Badge variant="secondary" className="text-xs">
                       {plugin.name}
@@ -50,8 +54,8 @@ export function PluginPipelineSection({ detail }: PluginPipelineSectionProps) {
                 <Badge variant="outline" className="text-xs">
                   Provider 响应
                 </Badge>
-                {[...plugins.response].reverse().map((plugin, index) => (
-                  <div key={`res-${plugin.name}-${index}`} className="flex items-center gap-1.5">
+                {[...plugins.response].reverse().map((plugin) => (
+                  <div key={pluginKey('res', plugin)} className="flex items-center gap-1.5">
                     <span className="text-muted-foreground">→</span>
                     <Badge variant="secondary" className="text-xs">
                       {plugin.name}
@@ -74,8 +78,8 @@ export function PluginPipelineSection({ detail }: PluginPipelineSectionProps) {
           <p className="text-sm text-muted-foreground">各插件的包名与参数配置</p>
         </div>
         <div className="space-y-3 px-3 py-3">
-          {(plugins.request ?? plugins.response ?? []).map((plugin, index) => (
-            <div key={`detail-${plugin.name}-${index}`} className="rounded-md border bg-muted/20 p-3">
+          {(plugins.request ?? plugins.response ?? []).map((plugin) => (
+            <div key={pluginKey('detail', plugin)} className="rounded-md border bg-muted/20 p-3">
               <div className="flex items-center gap-2">
                 <Badge variant="secondary" className="text-xs">
                   {plugin.name}

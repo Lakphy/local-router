@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 function runCli(args: string[]): { exitCode: number; stdout: string; stderr: string } {
   const proc = Bun.spawnSync(['bun', 'run', 'src/cli.ts', ...args], {
@@ -64,11 +64,13 @@ describe('CLI daemon lifecycle', () => {
         running: boolean;
         mode: string;
         port: number;
+        baseUrl: string;
         uptimeSeconds: number | null;
       };
       expect(statusJson.running).toBe(true);
       expect(statusJson.mode).toBe('daemon');
       expect(statusJson.port).toBe(port);
+      expect(statusJson.baseUrl).toBe(`http://127.0.0.1:${port}`);
       expect(statusJson.uptimeSeconds === null || statusJson.uptimeSeconds >= 0).toBe(true);
 
       const stop = runCli(['stop']);

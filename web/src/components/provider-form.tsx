@@ -1,5 +1,5 @@
-import { Eye, EyeOff, Plus, Trash2, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -131,7 +131,9 @@ export function ProviderForm({ name, config, isNew, onChange }: ProviderFormProp
 
       <PluginListEditor
         plugins={config.plugins ?? []}
-        onChange={(plugins) => onChange({ ...config, plugins: plugins.length > 0 ? plugins : undefined })}
+        onChange={(plugins) =>
+          onChange({ ...config, plugins: plugins.length > 0 ? plugins : undefined })
+        }
       />
     </div>
   );
@@ -175,7 +177,7 @@ function PluginListEditor({
         setEntries(plugins.map((config) => ({ id: generatePluginId(), config })));
       }
     }
-  }, [plugins, entries.length]);
+  }, [plugins, entries]);
 
   function commitEntries(next: PluginEntry[]) {
     setEntries(next);
@@ -225,9 +227,7 @@ function PluginListEditor({
         </Button>
       </div>
 
-      {entries.length === 0 && (
-        <p className="text-xs text-muted-foreground py-2">暂无插件配置</p>
-      )}
+      {entries.length === 0 && <p className="text-xs text-muted-foreground py-2">暂无插件配置</p>}
 
       {entries.map((entry, index) => (
         <PluginItemEditor
@@ -347,9 +347,7 @@ function PluginItemEditor({
           className="font-mono text-xs min-h-[60px]"
           rows={3}
         />
-        {paramsError && (
-          <p className="text-xs text-destructive">{paramsError}</p>
-        )}
+        {paramsError && <p className="text-xs text-destructive">{paramsError}</p>}
       </div>
     </div>
   );

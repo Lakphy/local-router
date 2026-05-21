@@ -21,7 +21,7 @@ interface AnyRecord {
 export function convertResponseBody(
   bodyStr: string,
   source: ProtocolFormat,
-  target: ProtocolFormat,
+  target: ProtocolFormat
 ): string {
   if (source === target) return bodyStr;
 
@@ -147,7 +147,8 @@ function anthropicToCompletions(body: AnyRecord): AnyRecord {
         type: 'function',
         function: {
           name: block.name,
-          arguments: typeof block.input === 'string' ? block.input : JSON.stringify(block.input ?? {}),
+          arguments:
+            typeof block.input === 'string' ? block.input : JSON.stringify(block.input ?? {}),
         },
       });
     }
@@ -187,8 +188,7 @@ function anthropicToCompletions(body: AnyRecord): AnyRecord {
     usage: {
       prompt_tokens: (usage.input_tokens as number) ?? 0,
       completion_tokens: (usage.output_tokens as number) ?? 0,
-      total_tokens:
-        ((usage.input_tokens as number) ?? 0) + ((usage.output_tokens as number) ?? 0),
+      total_tokens: ((usage.input_tokens as number) ?? 0) + ((usage.output_tokens as number) ?? 0),
     },
   };
 }
@@ -270,7 +270,8 @@ function anthropicToResponses(body: AnyRecord): AnyRecord {
         id: block.id,
         call_id: block.id,
         name: block.name,
-        arguments: typeof block.input === 'string' ? block.input : JSON.stringify(block.input ?? {}),
+        arguments:
+          typeof block.input === 'string' ? block.input : JSON.stringify(block.input ?? {}),
         status: 'completed',
       });
     }
@@ -288,10 +289,7 @@ function anthropicToResponses(body: AnyRecord): AnyRecord {
 
   output.push(...functionCalls);
 
-  const status =
-    body.stop_reason === 'max_tokens'
-      ? 'incomplete'
-      : 'completed';
+  const status = body.stop_reason === 'max_tokens' ? 'incomplete' : 'completed';
 
   const usage = (body.usage ?? {}) as AnyRecord;
 
@@ -305,8 +303,7 @@ function anthropicToResponses(body: AnyRecord): AnyRecord {
     usage: {
       input_tokens: (usage.input_tokens as number) ?? 0,
       output_tokens: (usage.output_tokens as number) ?? 0,
-      total_tokens:
-        ((usage.input_tokens as number) ?? 0) + ((usage.output_tokens as number) ?? 0),
+      total_tokens: ((usage.input_tokens as number) ?? 0) + ((usage.output_tokens as number) ?? 0),
     },
   };
 }

@@ -1,7 +1,7 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { LogConfig } from '../../src/config';
 import { getLogEventDetailById } from '../../src/log-query';
 import type { LogEvent } from '../../src/logger';
@@ -68,7 +68,9 @@ describe('log-query 详情查询', () => {
 
     const filePath = join(tempDir, 'events', '2026-03-16.jsonl');
     writeFileSync(filePath, `${JSON.stringify(event)}\n`);
-    const id = Buffer.from(JSON.stringify({ d: '2026-03-16', l: 1 }), 'utf-8').toString('base64url');
+    const id = Buffer.from(JSON.stringify({ d: '2026-03-16', l: 1 }), 'utf-8').toString(
+      'base64url'
+    );
 
     const detail = await getLogEventDetailById({ logConfig }, id);
 

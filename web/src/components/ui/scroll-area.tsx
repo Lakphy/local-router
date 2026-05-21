@@ -1,7 +1,7 @@
-import type * as React from "react"
-import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
+import { ScrollArea as ScrollAreaPrimitive } from 'radix-ui';
+import type * as React from 'react';
 
-import { cn } from "@/lib/utils"
+import { cn } from '@/lib/utils';
 
 function ScrollArea({
   className,
@@ -14,7 +14,7 @@ function ScrollArea({
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
-      className={cn("relative", className)}
+      className={cn('relative', className)}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
@@ -28,12 +28,12 @@ function ScrollArea({
       <ScrollBar orientation="horizontal" />
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
-  )
+  );
 }
 
 function ScrollBar({
   className,
-  orientation = "vertical",
+  orientation = 'vertical',
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>) {
   return (
@@ -41,11 +41,9 @@ function ScrollBar({
       data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
-        "flex touch-none select-none",
-        orientation === "vertical" &&
-          "h-full w-[6px] border-l border-l-transparent p-0",
-        orientation === "horizontal" &&
-          "h-[6px] flex-col border-t border-t-transparent p-0",
+        'flex touch-none select-none',
+        orientation === 'vertical' && 'h-full w-[6px] border-l border-l-transparent p-0',
+        orientation === 'horizontal' && 'h-[6px] flex-col border-t border-t-transparent p-0',
         className
       )}
       {...props}
@@ -55,7 +53,7 @@ function ScrollBar({
         className="bg-border hover:bg-muted-foreground/50 relative flex-1 rounded-[3px] transition-colors duration-200"
       />
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
-  )
+  );
 }
 
-export { ScrollArea, ScrollBar }
+export { ScrollArea, ScrollBar };

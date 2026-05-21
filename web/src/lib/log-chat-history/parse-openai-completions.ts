@@ -1,14 +1,7 @@
 import type { LogEventDetail } from '../api';
-import type { NormalizedChatMessage, NormalizedContentBlock, RouteParseResult } from './types';
 import { parseSseFrames } from './parse-sse';
-import {
-  asArray,
-  asString,
-  ensureObject,
-  isRecord,
-  normalizeRole,
-  safeJsonParse,
-} from './utils';
+import type { NormalizedChatMessage, NormalizedContentBlock, RouteParseResult } from './types';
+import { asArray, asString, ensureObject, isRecord, normalizeRole, safeJsonParse } from './utils';
 
 function normalizeOpenAIRequestContent(content: unknown): NormalizedContentBlock[] {
   if (typeof content === 'string') {
@@ -51,7 +44,10 @@ function normalizeOpenAIRequestContent(content: unknown): NormalizedContentBlock
   return blocks;
 }
 
-function parseOpenAICompletionsRequest(requestBody: unknown, warnings: string[]): NormalizedChatMessage[] {
+function parseOpenAICompletionsRequest(
+  requestBody: unknown,
+  warnings: string[]
+): NormalizedChatMessage[] {
   const body = ensureObject(requestBody);
   if (!body) {
     warnings.push('OpenAI completions request body is missing or invalid.');
@@ -150,7 +146,10 @@ function normalizeAssistantMessage(message: Record<string, unknown>): Normalized
   return blocks;
 }
 
-function parseOpenAICompletionsResponse(responseBody: string | null, warnings: string[]): NormalizedChatMessage[] {
+function parseOpenAICompletionsResponse(
+  responseBody: string | null,
+  warnings: string[]
+): NormalizedChatMessage[] {
   if (!responseBody) {
     warnings.push('OpenAI completions non-stream response body is empty.');
     return [];
@@ -158,7 +157,9 @@ function parseOpenAICompletionsResponse(responseBody: string | null, warnings: s
 
   const parsed = safeJsonParse(responseBody);
   if (!parsed.value || !isRecord(parsed.value)) {
-    warnings.push(`OpenAI completions response JSON parse failed: ${parsed.error ?? 'invalid json'}`);
+    warnings.push(
+      `OpenAI completions response JSON parse failed: ${parsed.error ?? 'invalid json'}`
+    );
     return [
       {
         role: 'assistant',
@@ -199,7 +200,10 @@ interface ToolCallAccumulator {
   partial: boolean;
 }
 
-function parseOpenAICompletionsStream(streamContent: string | null, warnings: string[]): {
+function parseOpenAICompletionsStream(
+  streamContent: string | null,
+  warnings: string[]
+): {
   messages: NormalizedChatMessage[];
   streamEventCount: number;
   partial: boolean;
@@ -302,7 +306,9 @@ function parseOpenAICompletionsStream(streamContent: string | null, warnings: st
     return { messages: [], streamEventCount: sse.frames.length, partial: sse.partial };
   }
 
-  const hasPartialTool = blocks.some((block) => block.type === 'tool_use' && block.partial === true);
+  const hasPartialTool = blocks.some(
+    (block) => block.type === 'tool_use' && block.partial === true
+  );
 
   return {
     messages: [

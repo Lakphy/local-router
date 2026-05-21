@@ -1,11 +1,11 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { generateText, streamText } from 'ai';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { Hono } from 'hono';
 import { createAppFromConfigPath } from '../../src/index';
 import { config } from '../setup';
@@ -154,11 +154,7 @@ function mockUpstreamResponse(url: string, init?: RequestInit): Response | null 
 function createLocalFetch(app: Hono) {
   const localFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     return app.request(url, init);
   };
   return localFetch as unknown as typeof globalThis.fetch;
@@ -208,11 +204,7 @@ describe('AI SDK v6 Provider 解析兼容性', () => {
 
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url =
-        typeof input === 'string'
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url;
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
       const mocked = mockUpstreamResponse(url, init);
       if (mocked) return mocked;
       return originalFetch(input, init);

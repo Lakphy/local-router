@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, Copy, GripVertical, Plus, Trash2 } from 'lucide-react';
-import { useState, type DragEvent } from 'react';
+import { type DragEvent, useState } from 'react';
 import { ProviderForm } from '@/components/provider-form';
 import {
   AlertDialog,
@@ -281,7 +281,10 @@ export function ProvidersPage() {
                             <Copy className="h-4 w-4" />
                             复制
                           </ContextMenuItem>
-                          <ContextMenuItem onSelect={() => setPendingDelete(name)} variant="destructive">
+                          <ContextMenuItem
+                            onSelect={() => setPendingDelete(name)}
+                            variant="destructive"
+                          >
                             <Trash2 className="h-4 w-4" />
                             删除
                           </ContextMenuItem>
@@ -339,9 +342,7 @@ export function ProvidersPage() {
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>添加 Provider</DialogTitle>
-                    <DialogDescription>
-                      输入新 Provider 的名称（kebab-case 格式）
-                    </DialogDescription>
+                    <DialogDescription>输入新 Provider 的名称（kebab-case 格式）</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-2">
                     <Label htmlFor="new-provider-name">名称</Label>

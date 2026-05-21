@@ -25,7 +25,9 @@ export function ChatHistoryCard({ parsed }: { parsed: ParsedChatHistory }) {
             </Badge>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">由 request + response/stream 自动还原的消息历史</p>
+        <p className="text-sm text-muted-foreground">
+          由 request + response/stream 自动还原的消息历史
+        </p>
       </div>
 
       <div className="space-y-3 px-3 py-3">
@@ -48,7 +50,11 @@ export function ChatHistoryCard({ parsed }: { parsed: ParsedChatHistory }) {
         ) : (
           <div className="space-y-2">
             {parsed.messages.map((message, index) => (
-              <ChatMessageItem key={`${index}-${message.role}-${message.source}`} message={message} index={index} />
+              <ChatMessageItem
+                key={`${message.role}-${message.source}-${JSON.stringify(message.blocks)}-${JSON.stringify(message.meta ?? {})}`}
+                message={message}
+                index={index}
+              />
             ))}
           </div>
         )}

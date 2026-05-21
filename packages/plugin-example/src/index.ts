@@ -1,4 +1,4 @@
-import type { PluginDefinition, Plugin, PluginContext } from '@lakphy/local-router/plugin';
+import type { Plugin, PluginDefinition } from '@lakphy/local-router/plugin';
 
 interface ExamplePluginParams {
   tag?: string;
@@ -13,7 +13,7 @@ const definition: PluginDefinition = {
     let requestCount = 0;
 
     return {
-      async onRequest({ ctx, url, headers, body }) {
+      async onRequest({ ctx, headers }) {
         requestCount++;
         // 在请求头中注入自定义标记
         headers.set('x-plugin-timestamp', new Date().toISOString());
@@ -24,7 +24,7 @@ const definition: PluginDefinition = {
         return { headers };
       },
 
-      async onResponse({ ctx, status, headers, body }) {
+      async onResponse({ body }) {
         // 在 JSON 响应中注入元数据字段
         try {
           const parsed = JSON.parse(body) as Record<string, unknown>;
@@ -40,10 +40,9 @@ const definition: PluginDefinition = {
         }
       },
 
-      async onSSEResponse({ ctx, status, headers }) {
+      async onSSEResponse() {
         // 返回一个 TransformStream，在 SSE 流中追加注释行
         const encoder = new TextEncoder();
-        const decoder = new TextDecoder();
         const transform = new TransformStream<Uint8Array, Uint8Array>({
           transform(chunk, controller) {
             controller.enqueue(chunk);
@@ -62,9 +61,7 @@ const definition: PluginDefinition = {
       },
 
       dispose() {
-        console.log(
-          `[plugin:example] disposed after handling ${requestCount} requests`
-        );
+        console.log(`[plugin:example] disposed after handling ${requestCount} requests`);
       },
     };
   },

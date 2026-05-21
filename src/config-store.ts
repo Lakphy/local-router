@@ -1,5 +1,5 @@
-import { resolve } from 'node:path';
 import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import JSON5 from 'json5';
 import type { AppConfig } from './config';
 import { loadConfig } from './config';

@@ -38,9 +38,16 @@ export interface LogConfig {
   bodyPolicy?: 'off' | 'masked' | 'full';
 }
 
+export interface ServerConfig {
+  lanAccess?: {
+    enabled?: boolean;
+  };
+}
+
 export interface AppConfig {
   routes: Record<string, Record<string, RouteTarget>>;
   providers: Record<string, ProviderConfig>;
+  server?: ServerConfig;
   log?: LogConfig;
 }
 

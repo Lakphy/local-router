@@ -7,11 +7,11 @@
  * 配置示例（零参数）：
  *   { "package": "./packages/plugin-adapter-responses-to-anthropic" }
  */
-import type { PluginDefinition, Plugin } from '@lakphy/local-router/plugin';
+import type { Plugin, PluginDefinition } from '@lakphy/local-router/plugin';
 import { convertRequestBody } from '../../plugin-protocol-adapter/src/convert-request';
 import { convertResponseBody } from '../../plugin-protocol-adapter/src/convert-response';
 import { createStreamTransform } from '../../plugin-protocol-adapter/src/convert-stream';
-import { rewriteUrl, convertAuthHeaders } from '../../plugin-protocol-adapter/src/shared';
+import { convertAuthHeaders, rewriteUrl } from '../../plugin-protocol-adapter/src/shared';
 
 const SOURCE = 'openai-responses' as const;
 const TARGET = 'anthropic-messages' as const;
@@ -42,7 +42,7 @@ const definition: PluginDefinition = {
         return { status, headers, transform };
       },
 
-      async onError({ ctx, phase, error }) {
+      async onError({ phase, error }) {
         console.error(`[plugin:${SOURCE}->${TARGET}] ${phase}: ${error.message}`);
       },
 

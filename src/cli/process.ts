@@ -2,7 +2,7 @@ import { closeSync, openSync, readFileSync, statSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { ensureConfigFile, resolveConfigPath } from '../config';
-import { startServer, type RunningServer } from '../server';
+import { type RunningServer, startServer } from '../server';
 import {
   clearRuntimeFiles,
   ensureRuntimeDirs,
@@ -97,7 +97,7 @@ export async function runServerProcess(opts: {
     console.log(`首次启动已创建配置文件: ${ensured.path}`);
   }
 
-  const host = opts.host ?? process.env.HOST ?? '127.0.0.1';
+  const host = opts.host ?? process.env.HOST ?? '0.0.0.0';
   const port = opts.port ?? Number.parseInt(process.env.PORT ?? '4099', 10);
   if (!Number.isFinite(port)) {
     throw new Error(`无效端口: ${opts.port ?? process.env.PORT}`);
@@ -181,12 +181,7 @@ export async function startDaemon(flags: CliSharedFlags): Promise<void> {
 
   const stdoutFd = openSync(files.daemonLog, 'a');
   const stderrFd = openSync(files.daemonLog, 'a');
-  const childArgs = [
-    process.argv[1] ?? 'src/cli.ts',
-    '__run-server',
-    '--mode',
-    'daemon',
-  ];
+  const childArgs = [process.argv[1] ?? 'src/cli.ts', '__run-server', '--mode', 'daemon'];
   if (flags.config) {
     childArgs.push('--config', resolveConfigArgPath(flags.config));
   }
@@ -257,7 +252,10 @@ export async function stopProcess(graceMs = 8000): Promise<boolean> {
   return true;
 }
 
-export function readLogDelta(filePath: string, offset: number): { content: string; nextOffset: number } {
+export function readLogDelta(
+  filePath: string,
+  offset: number
+): { content: string; nextOffset: number } {
   try {
     const stats = statSync(filePath);
     if (stats.size <= offset) {

@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import type { LogEventDetail } from '@/lib/api';
 import { FlowStepHeader } from '@/components/log-detail/flow-step-header';
 import { HeadersTableBlock } from '@/components/log-detail/headers-table-block';
 import { JsonBlock } from '@/components/log-detail/json-block';
 import { MetaItem } from '@/components/log-detail/meta-item';
 import { restoreLocalRouterBody } from '@/components/log-detail/utils';
+import type { LogEventDetail } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 interface FlowStep {
@@ -40,7 +40,9 @@ export function RequestResponseFlowSections({ detail }: RequestResponseFlowSecti
       shortTitle: '用户请求',
       description: '用户发送给 local-router 的原始请求（插件处理前）',
       tag: 'request',
-      connector: hasPlugins ? `插件: ${plugins?.request?.map((p) => p.name).join(' → ') ?? '-'}` : undefined,
+      connector: hasPlugins
+        ? `插件: ${plugins?.request?.map((p) => p.name).join(' → ') ?? '-'}`
+        : undefined,
     },
     {
       key: 'provider-request',
@@ -59,7 +61,14 @@ export function RequestResponseFlowSections({ detail }: RequestResponseFlowSecti
       description: `${detail.summary.provider} 返回给 local-router 的原始响应（插件处理前）`,
       tag: 'response',
       connector: hasPlugins
-        ? `插件: ${plugins?.response ? [...plugins.response].reverse().map((p) => p.name).join(' → ') : '-'}`
+        ? `插件: ${
+            plugins?.response
+              ? [...plugins.response]
+                  .reverse()
+                  .map((p) => p.name)
+                  .join(' → ')
+              : '-'
+          }`
         : undefined,
     },
     {
@@ -238,7 +247,10 @@ export function RequestResponseFlowSections({ detail }: RequestResponseFlowSecti
               />
               <div className="space-y-3 px-3 py-3">
                 <div className="grid gap-2 text-sm sm:grid-cols-2">
-                  <MetaItem label="upstream_status" value={String(detail.response.upstreamStatus)} />
+                  <MetaItem
+                    label="upstream_status"
+                    value={String(detail.response.upstreamStatus)}
+                  />
                   <MetaItem label="content-type" value={detail.response.contentType ?? '-'} mono />
                 </div>
                 <HeadersTableBlock title="headers" headers={detail.response.responseHeaders} />

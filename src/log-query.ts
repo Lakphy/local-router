@@ -316,7 +316,11 @@ function updateRunningStats(stats: RunningStats, item: LocatedLogEvent): void {
   stats.latencyCounts.set(roundedLatency, (stats.latencyCounts.get(roundedLatency) ?? 0) + 1);
 }
 
-function percentileFromCounts(latencyCounts: Map<number, number>, total: number, ratio: number): number {
+function percentileFromCounts(
+  latencyCounts: Map<number, number>,
+  total: number,
+  ratio: number
+): number {
   if (total <= 0 || latencyCounts.size === 0) return 0;
   const targetRank = Math.max(1, Math.ceil(total * ratio));
   const sorted = [...latencyCounts.entries()].sort((a, b) => a[0] - b[0]);

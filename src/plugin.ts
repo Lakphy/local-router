@@ -35,24 +35,27 @@ export interface Plugin {
     url: string;
     headers: Headers;
     body: Record<string, unknown>;
-  }): Promise<{ url?: string; headers?: Headers; body?: Record<string, unknown> } | void>;
+  }): Promise<{ url?: string; headers?: Headers; body?: Record<string, unknown> } | undefined>;
 
   onResponse?(args: {
     ctx: PluginContext;
     status: number;
     headers: Record<string, string>;
     body: string;
-  }): Promise<{ status?: number; headers?: Record<string, string>; body?: string } | void>;
+  }): Promise<{ status?: number; headers?: Record<string, string>; body?: string } | undefined>;
 
   onSSEResponse?(args: {
     ctx: PluginContext;
     status: number;
     headers: Record<string, string>;
-  }): Promise<{
-    status?: number;
-    headers?: Record<string, string>;
-    transform?: TransformStream<Uint8Array, Uint8Array>;
-  } | void>;
+  }): Promise<
+    | {
+        status?: number;
+        headers?: Record<string, string>;
+        transform?: TransformStream<Uint8Array, Uint8Array>;
+      }
+    | undefined
+  >;
 
   onError?(args: {
     ctx: PluginContext;

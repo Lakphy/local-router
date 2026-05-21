@@ -1,9 +1,9 @@
 import { Copy } from 'lucide-react';
 import { useMemo } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
 import { StructuredDataBlock } from '@/components/log-detail/structured-data-block';
 import { parseStreamLines } from '@/components/log-detail/utils';
+import { Button } from '@/components/ui/button';
 
 interface StreamContentBlockProps {
   title: string;
@@ -49,7 +49,10 @@ export function StreamContentBlock({ title, content, emptyText }: StreamContentB
       {header}
       <div className="space-y-2 rounded-md border bg-muted/30 p-3">
         {lines.map((line) => (
-          <div key={`${line.lineNo}-${line.type}`} className="space-y-1 rounded-md border bg-background/80 p-2">
+          <div
+            key={`${line.lineNo}-${line.type}`}
+            className="space-y-1 rounded-md border bg-background/80 p-2"
+          >
             <div className="text-[11px] text-muted-foreground">line {line.lineNo}</div>
             <StructuredDataBlock
               value={line.type === 'json' ? line.value : line.value}

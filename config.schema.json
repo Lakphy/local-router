@@ -60,6 +60,11 @@
         "$ref": "#/$defs/providerConfig"
       }
     },
+    "server": {
+      "$ref": "#/$defs/serverConfig",
+      "description": "通用服务设置。控制服务监听后的访问处理策略。",
+      "markdownDescription": "通用服务设置。\n\n服务默认监听所有网卡，但 `lanAccess.enabled` 默认为 `false`，此时只处理本机来源请求；开启后才处理局域网来源请求。"
+    },
     "log": {
       "$ref": "#/$defs/logConfig",
       "description": "日志配置。省略此字段或不配置时，日志系统不会启用。配置后默认启用，可通过 enabled: false 暂停。",
@@ -198,6 +203,29 @@
         }
       ]
     },
+    "serverConfig": {
+      "type": "object",
+      "description": "通用服务设置。",
+      "additionalProperties": false,
+      "properties": {
+        "lanAccess": {
+          "$ref": "#/$defs/lanAccessConfig",
+          "description": "局域网访问控制。默认关闭。"
+        }
+      }
+    },
+    "lanAccessConfig": {
+      "type": "object",
+      "description": "局域网访问控制。关闭时仅处理本机来源请求；开启时处理本机与局域网来源请求。",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否允许局域网内其他设备访问 local-router。默认为 false。"
+        }
+      }
+    },
     "logConfig": {
       "type": "object",
       "description": "日志系统配置。控制请求/响应日志的记录方式、存储路径和隐私脱敏策略。",
@@ -277,7 +305,11 @@
           "type": "string",
           "minLength": 1,
           "description": "插件包名、本地路径或远程 URL。以 ./ 或 ../ 或 / 开头视为本地文件（相对于配置文件目录解析）；以 http:// 或 https:// 开头视为远程 URL（运行时下载后加载）；否则作为 npm 包名通过 import() 加载。支持 .js 和 .ts 文件。",
-          "examples": ["local-router-plugin-audit", "./plugins/content-filter.ts", "https://example.com/plugins/my-plugin.js"]
+          "examples": [
+            "local-router-plugin-audit",
+            "./plugins/content-filter.ts",
+            "https://example.com/plugins/my-plugin.js"
+          ]
         },
         "params": {
           "type": "object",

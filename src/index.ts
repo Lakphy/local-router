@@ -3,14 +3,15 @@ import { dirname, resolve } from 'node:path';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { streamText } from 'ai';
 import { swaggerUI } from '@hono/swagger-ui';
+import { streamText } from 'ai';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
 import type { AppConfig, RouteTarget } from './config';
 import { parseConfigPath, resolveLogBaseDir } from './config';
 import { ConfigStore } from './config-store';
+import { validateConfigOrThrow } from './config-validate';
 import { CryptoSession } from './crypto';
 import { getLogMetrics, isLogMetricsWindow } from './log-metrics';
 import {
@@ -28,15 +29,20 @@ import {
 import { queryLogSessions } from './log-sessions';
 import { getLogStorageInfo, startLogStorageBackgroundTask } from './log-storage';
 import { initLogger, resetLogger } from './logger';
+import { createNetworkAccessMiddleware } from './network-access';
 import { openAPISpec } from './openapi';
 import { PluginManager } from './plugin-loader';
 import { createAnthropicMessagesRoutes } from './routes/anthropic-messages';
 import { createOpenaiCompletionsRoutes } from './routes/openai-completions';
 import { createOpenaiResponsesRoutes } from './routes/openai-responses';
 import { getBundledSchemaPath, getBundledWebRoot } from './runtime-assets';
-import { validateConfigOrThrow } from './config-validate';
+import { createServerAddressInfo } from './server-address';
 
 type CleanupFn = () => void;
+interface AppListenOptions {
+  host?: string;
+  port?: number;
+}
 
 export interface AppRuntime {
   app: Hono;
@@ -92,13 +98,25 @@ const ROUTE_REGISTRY: Record<
   },
 };
 
-function printIntegrationGuide(config: { routes: Record<string, Record<string, RouteTarget>> }) {
-  const host = process.env.HOST ?? '127.0.0.1';
-  const port = process.env.PORT ?? '4099';
-  const baseUrl = `http://${host}:${port}`;
+function printIntegrationGuide(
+  config: { routes: Record<string, Record<string, RouteTarget>> },
+  listen: AppListenOptions = {}
+) {
+  const host = listen.host ?? process.env.HOST ?? '0.0.0.0';
+  const parsedPort = listen.port ?? Number.parseInt(process.env.PORT ?? '4099', 10);
+  const address = createServerAddressInfo(host, Number.isFinite(parsedPort) ? parsedPort : 4099);
+  const baseUrl = address.localUrl;
 
   console.log('\n================ local-router 接入指南 ================');
-  console.log(`本地服务地址: ${baseUrl}`);
+  console.log(`服务监听地址: ${address.listenUrl}`);
+  console.log(`本机访问地址: ${address.localUrl}`);
+  if (
+    address.listenHost === '0.0.0.0' ||
+    address.listenHost === '::' ||
+    address.listenHost === '[::]'
+  ) {
+    console.log('局域网访问: 开启局域网服务后，使用本机局域网 IP 替换上面的本机地址。');
+  }
   console.log('健康检查: GET /');
   console.log(`API 文档: ${baseUrl}/api/docs`);
   console.log(`管理面板: ${baseUrl}/admin`);
@@ -186,7 +204,11 @@ function normalizeChatProxyBaseUrl(
   return normalized;
 }
 
-function createChatProxyModel(providerName: string, providerConfig: AppConfig['providers'][string], model: string) {
+function createChatProxyModel(
+  providerName: string,
+  providerConfig: AppConfig['providers'][string],
+  model: string
+) {
   const common = {
     apiKey: providerConfig.apiKey,
     baseURL: normalizeChatProxyBaseUrl(providerConfig.type, providerConfig.base),
@@ -207,7 +229,11 @@ function createChatProxyModel(providerName: string, providerConfig: AppConfig['p
 }
 
 // 管理面板配置 API
-function createAdminApiRoutes(store: ConfigStore, pluginManager: PluginManager, registerCleanup?: (cleanup: CleanupFn) => void): Hono {
+function createAdminApiRoutes(
+  store: ConfigStore,
+  pluginManager: PluginManager,
+  registerCleanup?: (cleanup: CleanupFn) => void
+): Hono {
   const api = new Hono();
   const cryptoSessions = new Map<string, { session: CryptoSession; createdAt: number }>();
   const CRYPTO_SESSION_TTL_MS = 2 * 60 * 1000;
@@ -239,9 +265,12 @@ function createAdminApiRoutes(store: ConfigStore, pluginManager: PluginManager, 
     return record.session;
   };
 
-  const sessionSweepTimer = setInterval(() => {
-    pruneExpiredCryptoSessions();
-  }, Math.max(5_000, Math.floor(CRYPTO_SESSION_TTL_MS / 2)));
+  const sessionSweepTimer = setInterval(
+    () => {
+      pruneExpiredCryptoSessions();
+    },
+    Math.max(5_000, Math.floor(CRYPTO_SESSION_TTL_MS / 2))
+  );
   sessionSweepTimer.unref?.();
   registerCleanup?.(() => {
     clearInterval(sessionSweepTimer);
@@ -274,7 +303,10 @@ function createAdminApiRoutes(store: ConfigStore, pluginManager: PluginManager, 
       return c.json({ serverPublicKey, sessionId });
     } catch (err) {
       session.dispose();
-      return c.json({ error: `握手失败: ${err instanceof Error ? err.message : String(err)}` }, 400);
+      return c.json(
+        { error: `握手失败: ${err instanceof Error ? err.message : String(err)}` },
+        400
+      );
     }
   });
 
@@ -389,7 +421,11 @@ function createAdminApiRoutes(store: ConfigStore, pluginManager: PluginManager, 
       return c.json({ error: 'provider 和 model 为必填字段' }, 400);
     }
 
-    if (!Array.isArray(body.messages) || body.messages.length === 0 || !body.messages.every(isChatProxyMessage)) {
+    if (
+      !Array.isArray(body.messages) ||
+      body.messages.length === 0 ||
+      !body.messages.every(isChatProxyMessage)
+    ) {
       return c.json({ error: 'messages 必须是非空消息数组' }, 400);
     }
 
@@ -756,7 +792,9 @@ function createAdminApiRoutes(store: ConfigStore, pluginManager: PluginManager, 
             if (closed) return;
 
             if (data.items.length > 0) {
-              const maxTs = Math.max(...data.items.map((item) => Date.parse(item.ts)).filter(Number.isFinite));
+              const maxTs = Math.max(
+                ...data.items.map((item) => Date.parse(item.ts)).filter(Number.isFinite)
+              );
               if (Number.isFinite(maxTs)) {
                 lastSeenTs = Math.max(lastSeenTs, maxTs + 1);
               }
@@ -879,7 +917,7 @@ async function proxyAdminToDevServer(c: Context, origin: string): Promise<Respon
 
 export async function createApp(
   store: ConfigStore,
-  options?: { registerCleanup?: (cleanup: CleanupFn) => void }
+  options?: { registerCleanup?: (cleanup: CleanupFn) => void; listen?: AppListenOptions }
 ): Promise<Hono> {
   const config = store.get();
   console.log(`已加载配置: ${store.getPath()}`);
@@ -901,17 +939,16 @@ export async function createApp(
   const pluginManager = new PluginManager(configDir);
   const reloadResult = await pluginManager.reloadAll(config.providers);
   if (!reloadResult.ok) {
-    console.warn(
-      `[plugin] 插件初始化完成，但有 ${reloadResult.failures.length} 个插件加载失败`
-    );
+    console.warn(`[plugin] 插件初始化完成，但有 ${reloadResult.failures.length} 个插件加载失败`);
   }
   options?.registerCleanup?.(() => {
     pluginManager.disposeAll().catch(() => {});
   });
 
-  printIntegrationGuide(config);
+  printIntegrationGuide(config, options?.listen);
 
   const app = new Hono();
+  app.use('*', createNetworkAccessMiddleware(store));
   app.get('/', (c) => c.text('local-router is running'));
 
   // 一次性注册所有已知协议类型的路由，handler 会在请求时动态检查配置
@@ -958,15 +995,22 @@ export async function createApp(
   return app;
 }
 
-export async function createAppFromConfigPath(configPath: string): Promise<Hono> {
+export async function createAppFromConfigPath(
+  configPath: string,
+  listen?: AppListenOptions
+): Promise<Hono> {
   const store = new ConfigStore(configPath);
-  return createApp(store);
+  return createApp(store, { listen });
 }
 
-export async function createAppRuntimeFromConfigPath(configPath: string): Promise<AppRuntime> {
+export async function createAppRuntimeFromConfigPath(
+  configPath: string,
+  listen?: AppListenOptions
+): Promise<AppRuntime> {
   const store = new ConfigStore(configPath);
   const cleanups: CleanupFn[] = [];
   const app = await createApp(store, {
+    listen,
     registerCleanup: (cleanup) => {
       cleanups.push(cleanup);
     },
@@ -988,5 +1032,10 @@ export async function createAppRuntimeFromConfigPath(configPath: string): Promis
 export async function createDefaultAppFromProcessArgs(): Promise<Hono> {
   const configPath = parseConfigPath();
   const store = new ConfigStore(configPath);
-  return createApp(store);
+  return createApp(store, {
+    listen: {
+      host: process.env.HOST ?? '0.0.0.0',
+      port: Number.parseInt(process.env.PORT ?? '4099', 10),
+    },
+  });
 }

@@ -1,7 +1,7 @@
-import { CircleDot, RotateCcw, Save, Zap, Loader2, GitCompare, FileCode2 } from 'lucide-react';
+import { CircleDot, FileCode2, GitCompare, Loader2, RotateCcw, Save, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { useConfigStore, selectIsDirty } from '@/stores/config-store';
+import { selectIsDirty, useConfigStore } from '@/stores/config-store';
 import { useDialogStore } from '@/stores/dialog-store';
 
 export function ActionBar() {
@@ -51,48 +51,32 @@ export function ActionBar() {
         )}
       </div>
       <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleViewDiff}
-          disabled={busy}
-        >
+        <Button variant="outline" size="sm" onClick={handleViewDiff} disabled={busy}>
           <GitCompare className="h-4 w-4 mr-1" />
           查看 Diff
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleViewRaw}
-          disabled={busy}
-        >
+        <Button variant="outline" size="sm" onClick={handleViewRaw} disabled={busy}>
           <FileCode2 className="h-4 w-4 mr-1" />
           查看 Raw
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleReset}
-          disabled={!isDirty || busy}
-        >
+        <Button variant="ghost" size="sm" onClick={handleReset} disabled={!isDirty || busy}>
           <RotateCcw className="h-4 w-4 mr-1" />
           重置
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleSave}
-          disabled={!isDirty || busy}
-        >
-          {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+        <Button variant="outline" size="sm" onClick={handleSave} disabled={!isDirty || busy}>
+          {saving ? (
+            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4 mr-1" />
+          )}
           保存
         </Button>
-        <Button
-          size="sm"
-          onClick={handleSaveAndApply}
-          disabled={!isDirty || busy}
-        >
-          {applying ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />}
+        <Button size="sm" onClick={handleSaveAndApply} disabled={!isDirty || busy}>
+          {applying ? (
+            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+          ) : (
+            <Zap className="h-4 w-4 mr-1" />
+          )}
           保存并应用
         </Button>
       </div>

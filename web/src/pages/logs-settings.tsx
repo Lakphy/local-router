@@ -1,7 +1,5 @@
-import type { LogConfig } from '@/types/config';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -9,8 +7,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useConfigStore } from '@/stores/config-store';
-import type { AppConfig } from '@/types/config';
+import type { AppConfig, LogConfig } from '@/types/config';
 
 function ensureLog(cfg: AppConfig): LogConfig {
   return cfg.log ?? {};
@@ -131,7 +130,7 @@ export function LogsSettingsPage() {
                           ...l,
                           events: {
                             ...l.events,
-                            retainDays: Number.parseInt(e.target.value) || 14,
+                            retainDays: Number.parseInt(e.target.value, 10) || 14,
                           },
                         }))
                       }
@@ -172,7 +171,7 @@ export function LogsSettingsPage() {
                           ...l,
                           streams: {
                             ...l.streams,
-                            retainDays: Number.parseInt(e.target.value) || 7,
+                            retainDays: Number.parseInt(e.target.value, 10) || 7,
                           },
                         }))
                       }
@@ -191,13 +190,15 @@ export function LogsSettingsPage() {
                           ...l,
                           streams: {
                             ...l.streams,
-                            maxBytesPerRequest: Number.parseInt(e.target.value) || 10485760,
+                            maxBytesPerRequest: Number.parseInt(e.target.value, 10) || 10485760,
                           },
                         }))
                       }
                       className="h-8"
                     />
-                    <p className="text-xs text-muted-foreground">默认 10MB (10485760)，超出部分将被截断</p>
+                    <p className="text-xs text-muted-foreground">
+                      默认 10MB (10485760)，超出部分将被截断
+                    </p>
                   </div>
                 </div>
               </div>

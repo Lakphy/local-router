@@ -36,15 +36,15 @@ export const useDialogStore = create<DialogStore>((set) => ({
 
   setDiffOpen: (open) => set({ diffOpen: open }),
 
-  openRaw: (jsonValue) =>
-    set({ rawOpen: true, rawValue: jsonValue, rawParseError: null }),
+  openRaw: (jsonValue) => set({ rawOpen: true, rawValue: jsonValue, rawParseError: null }),
 
   setRawOpen: (open) => set({ rawOpen: open }),
 
-  setRawValue: (value) => set({
-    rawValue: value,
-    rawParseError: null,
-  }),
+  setRawValue: (value) =>
+    set({
+      rawValue: value,
+      rawParseError: null,
+    }),
 
   setRawParseError: (error) => set({ rawParseError: error }),
 

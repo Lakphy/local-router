@@ -1,7 +1,8 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import type { LogConfig } from '../../src/config';
 import {
   collectHeaders,
   extractProviderRequestId,
@@ -10,7 +11,6 @@ import {
   type LogEvent,
   normalizeUrl,
 } from '../../src/logger';
-import type { LogConfig } from '../../src/config';
 
 // 重置 Logger 单例的内部状态
 declare module '../../src/logger' {

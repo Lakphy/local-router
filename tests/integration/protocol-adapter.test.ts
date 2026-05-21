@@ -1,7 +1,7 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { Hono } from 'hono';
 import { createAppFromConfigPath } from '../../src/index';
 
@@ -34,11 +34,17 @@ function mockUpstreamResponse(url: string, init?: RequestInit): Response | null 
   const headers: Record<string, string> = {};
   if (init?.headers) {
     const h = new Headers(init.headers);
-    h.forEach((v, k) => { headers[k] = v; });
+    h.forEach((v, k) => {
+      headers[k] = v;
+    });
   }
   let body: Record<string, unknown> = {};
   if (typeof init?.body === 'string') {
-    try { body = JSON.parse(init.body); } catch { /* ignore */ }
+    try {
+      body = JSON.parse(init.body);
+    } catch {
+      /* ignore */
+    }
   }
   capturedUpstreamRequests.push({ url, headers, body });
 
@@ -84,9 +90,7 @@ function mockUpstreamResponse(url: string, init?: RequestInit): Response | null 
         id: 'msg-mock',
         role: 'assistant',
         status: 'completed',
-        content: [
-          { type: 'output_text', text: 'Hello from OpenAI', annotations: [] },
-        ],
+        content: [{ type: 'output_text', text: 'Hello from OpenAI', annotations: [] }],
       },
     ],
     usage: {
@@ -105,11 +109,17 @@ function mockUpstreamToolResponse(url: string, init?: RequestInit): Response | n
   const headers: Record<string, string> = {};
   if (init?.headers) {
     const h = new Headers(init.headers);
-    h.forEach((v, k) => { headers[k] = v; });
+    h.forEach((v, k) => {
+      headers[k] = v;
+    });
   }
   let body: Record<string, unknown> = {};
   if (typeof init?.body === 'string') {
-    try { body = JSON.parse(init.body); } catch { /* ignore */ }
+    try {
+      body = JSON.parse(init.body);
+    } catch {
+      /* ignore */
+    }
   }
   capturedUpstreamRequests.push({ url, headers, body });
 
@@ -162,18 +172,14 @@ describe('协议适配器插件：Anthropic Messages → OpenAI Responses', () =
         base: 'http://mock-openai-responses-adapter',
         apiKey: 'test-api-key-123',
         models: { 'gpt-4o-test': {} },
-        plugins: [
-          { package: pluginPath },
-        ],
+        plugins: [{ package: pluginPath }],
       },
       'mock-openai-tools': {
         type: 'openai-responses' as const,
         base: 'http://mock-openai-responses-tools',
         apiKey: 'test-api-key-tools',
         models: { 'gpt-4o-tools': {} },
-        plugins: [
-          { package: pluginPath },
-        ],
+        plugins: [{ package: pluginPath }],
       },
     },
     routes: {
@@ -195,11 +201,7 @@ describe('协议适配器插件：Anthropic Messages → OpenAI Responses', () =
 
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url =
-        typeof input === 'string'
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url;
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
       const mocked = mockUpstreamResponse(url, init) ?? mockUpstreamToolResponse(url, init);
       if (mocked) return mocked;
@@ -226,9 +228,7 @@ describe('协议适配器插件：Anthropic Messages → OpenAI Responses', () =
         model: 'gpt-4o-test',
         max_tokens: 1024,
         system: 'You are a helpful assistant.',
-        messages: [
-          { role: 'user', content: 'Hello!' },
-        ],
+        messages: [{ role: 'user', content: 'Hello!' }],
       }),
     });
 
@@ -242,7 +242,7 @@ describe('协议适配器插件：Anthropic Messages → OpenAI Responses', () =
     expect(upstream.url).toContain('/v1/responses');
 
     // 认证头应该从 x-api-key 变为 Authorization: Bearer
-    expect(upstream.headers['authorization']).toBe('Bearer test-api-key-123');
+    expect(upstream.headers.authorization).toBe('Bearer test-api-key-123');
     expect(upstream.headers['x-api-key']).toBeUndefined();
 
     // 请求体应该是 OpenAI Responses 格式
@@ -274,9 +274,7 @@ describe('协议适配器插件：Anthropic Messages → OpenAI Responses', () =
       body: JSON.stringify({
         model: 'gpt-4o-tools',
         max_tokens: 1024,
-        messages: [
-          { role: 'user', content: 'What is the weather in Tokyo?' },
-        ],
+        messages: [{ role: 'user', content: 'What is the weather in Tokyo?' }],
         tools: [
           {
             name: 'get_weather',
@@ -328,9 +326,7 @@ describe('协议适配器插件：Anthropic Messages → OpenAI Responses', () =
         model: 'gpt-4o-test',
         max_tokens: 1024,
         stream: true,
-        messages: [
-          { role: 'user', content: 'Hello!' },
-        ],
+        messages: [{ role: 'user', content: 'Hello!' }],
       }),
     });
 
@@ -351,7 +347,9 @@ describe('协议适配器插件：Anthropic Messages → OpenAI Responses', () =
             const data = JSON.parse(nextLine.slice(6));
             events.push({ event: eventType, data });
             i++; // 跳过 data 行
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
         }
       }
     }
@@ -375,9 +373,7 @@ describe('协议适配器插件：Anthropic Messages → OpenAI Responses', () =
     // 应该有 content_block_delta (text_delta)
     const deltas = events.filter((e) => e.event === 'content_block_delta');
     expect(deltas.length).toBe(3); // "Hello", " from", " OpenAI"
-    const deltaTexts = deltas.map(
-      (d) => ((d.data.delta as Record<string, unknown>).text as string)
-    );
+    const deltaTexts = deltas.map((d) => (d.data.delta as Record<string, unknown>).text as string);
     expect(deltaTexts.join('')).toBe('Hello from OpenAI');
 
     // 应该有 content_block_stop

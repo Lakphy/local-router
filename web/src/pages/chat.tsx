@@ -1,34 +1,29 @@
 import {
   ExpandIcon,
   LoaderCircle,
-  SparklesIcon,
-  ShrinkIcon,
   SendIcon,
+  ShrinkIcon,
+  SparklesIcon,
   SquareIcon,
   Trash2Icon,
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { useConfigStore } from "@/stores/config-store";
-import type { ProviderConfig } from "@/types/config";
+} from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
+import { useConfigStore } from '@/stores/config-store';
+import type { ProviderConfig } from '@/types/config';
 
-type ChatRole = "user" | "assistant";
+type ChatRole = 'user' | 'assistant';
 
 interface ChatMessage {
   id: string;
@@ -46,7 +41,7 @@ interface ProviderOption {
 }
 
 function createMessageId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
   }
 
@@ -70,25 +65,18 @@ export function ChatPage() {
         .map(([key, provider]) => ({
           key,
           config: provider,
-          models: Object.keys(provider.models).sort((a, b) =>
-            a.localeCompare(b),
-          ),
+          models: Object.keys(provider.models).sort((a, b) => a.localeCompare(b)),
         }))
         .sort((a, b) => a.key.localeCompare(b.key)),
-    [config],
+    [config]
   );
 
-  const [provider, setProvider] = useState<string>(
-    providerOptions[0]?.key ?? "",
-  );
+  const [provider, setProvider] = useState<string>(providerOptions[0]?.key ?? '');
   const activeProvider =
     providerOptions.find((item) => item.key === provider) ?? providerOptions[0];
-  const modelOptions = useMemo(
-    () => activeProvider?.models ?? [],
-    [activeProvider],
-  );
-  const [model, setModel] = useState<string>(modelOptions[0] ?? "");
-  const [input, setInput] = useState("");
+  const modelOptions = useMemo(() => activeProvider?.models ?? [], [activeProvider]);
+  const [model, setModel] = useState<string>(modelOptions[0] ?? '');
+  const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -97,8 +85,8 @@ export function ChatPage() {
 
   useEffect(() => {
     if (!activeProvider) {
-      setProvider("");
-      setModel("");
+      setProvider('');
+      setModel('');
       return;
     }
 
@@ -109,17 +97,16 @@ export function ChatPage() {
 
   useEffect(() => {
     if (modelOptions.includes(model)) return;
-    setModel(modelOptions[0] ?? "");
+    setModel(modelOptions[0] ?? '');
   }, [model, modelOptions]);
 
   useEffect(() => {
     const viewport = scrollViewportRef.current;
     if (!viewport) return;
     viewport.scrollTop = viewport.scrollHeight;
-  }, [messages, isSending]);
+  });
 
-  const canSend =
-    !isSending && input.trim().length > 0 && !!activeProvider && !!model;
+  const canSend = !isSending && input.trim().length > 0 && !!activeProvider && !!model;
 
   async function handleSend() {
     const prompt = input.trim();
@@ -127,7 +114,7 @@ export function ChatPage() {
 
     const userMessage: ChatMessage = {
       id: createMessageId(),
-      role: "user",
+      role: 'user',
       content: prompt,
       provider: activeProvider.key,
       model,
@@ -139,13 +126,13 @@ export function ChatPage() {
       userMessage,
       {
         id: assistantMessageId,
-        role: "assistant",
-        content: "",
+        role: 'assistant',
+        content: '',
         provider: activeProvider.key,
         model,
       },
     ]);
-    setInput("");
+    setInput('');
     setIsSending(true);
 
     const abortController = new AbortController();
@@ -157,10 +144,10 @@ export function ChatPage() {
         content: message.content,
       }));
 
-      const response = await fetch("/api/chat/proxy", {
-        method: "POST",
+      const response = await fetch('/api/chat/proxy', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           provider: activeProvider.key,
@@ -176,12 +163,12 @@ export function ChatPage() {
       }
 
       if (!response.body) {
-        throw new Error("代理接口未返回流");
+        throw new Error('代理接口未返回流');
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let text = "";
+      let text = '';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -189,35 +176,31 @@ export function ChatPage() {
         text += decoder.decode(value, { stream: true });
         setMessages((current) =>
           current.map((message) =>
-            message.id === assistantMessageId
-              ? { ...message, content: text }
-              : message,
-          ),
+            message.id === assistantMessageId ? { ...message, content: text } : message
+          )
         );
       }
 
       text += decoder.decode();
-      const finalText = text.trim() || " ";
+      const finalText = text.trim() || ' ';
       setMessages((current) =>
         current.map((message) =>
-          message.id === assistantMessageId
-            ? { ...message, content: finalText }
-            : message,
-        ),
+          message.id === assistantMessageId ? { ...message, content: finalText } : message
+        )
       );
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
+      if (error instanceof Error && error.name === 'AbortError') {
         setMessages((current) =>
           current.map((message) =>
             message.id === assistantMessageId
-              ? { ...message, content: message.content || "已停止生成" }
-              : message,
-          ),
+              ? { ...message, content: message.content || '已停止生成' }
+              : message
+          )
         );
         return;
       }
 
-      const message = error instanceof Error ? error.message : "请求失败";
+      const message = error instanceof Error ? error.message : '请求失败';
       setMessages((current) =>
         current.map((item) =>
           item.id === assistantMessageId
@@ -226,8 +209,8 @@ export function ChatPage() {
                 content: item.content || `请求失败：${message}`,
                 error: true,
               }
-            : item,
-        ),
+            : item
+        )
       );
       toast.error(message);
     } finally {
@@ -276,18 +259,17 @@ export function ChatPage() {
                           <div className="rounded-full border bg-background px-3 py-1.5 text-xs text-muted-foreground">
                             Provider
                             <span className="ml-2 font-medium text-foreground">
-                              {activeProvider?.key || "未配置"}
+                              {activeProvider?.key || '未配置'}
                             </span>
                           </div>
                           <div className="rounded-full border bg-background px-3 py-1.5 text-xs text-muted-foreground">
                             Model
                             <span className="ml-2 font-medium text-foreground">
-                              {model || "未选择"}
+                              {model || '未选择'}
                             </span>
                           </div>
                         </div>
                       </div>
-
                     </div>
                   </div>
                 </div>
@@ -296,14 +278,14 @@ export function ChatPage() {
                   <div
                     key={message.id}
                     className={cn(
-                      "w-full px-1 py-1",
-                      message.role === "user"
-                        ? "rounded-3xl border border-primary/20 bg-primary/5 px-4 py-3"
-                        : "px-4 py-3",
-                      message.error && "border-destructive/40",
+                      'w-full px-1 py-1',
+                      message.role === 'user'
+                        ? 'rounded-3xl border border-primary/20 bg-primary/5 px-4 py-3'
+                        : 'px-4 py-3',
+                      message.error && 'border-destructive/40'
                     )}
                   >
-                    {message.role === "assistant" ? (
+                    {message.role === 'assistant' ? (
                       <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground">
                         <span>Assistant</span>
                         <span>{message.provider}</span>
@@ -312,12 +294,9 @@ export function ChatPage() {
                       </div>
                     ) : null}
                     <div className="whitespace-pre-wrap break-words text-sm leading-6">
-                      {message.content ||
-                        (isSending && message.role === "assistant"
-                          ? "..."
-                          : "")}
+                      {message.content || (isSending && message.role === 'assistant' ? '...' : '')}
                     </div>
-                    {message.role === "user" ? (
+                    {message.role === 'user' ? (
                       <div className="mt-2 text-right text-[11px] text-muted-foreground">
                         {message.provider} / {message.model}
                       </div>
@@ -335,20 +314,20 @@ export function ChatPage() {
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
+                if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault();
                   void handleSend();
                 }
               }}
               disabled={!activeProvider || !model}
               className={cn(
-                "w-full resize-none bg-transparent px-1 focus:outline-none",
-                expanded ? "h-28" : "h-10",
+                'w-full resize-none bg-transparent px-1 focus:outline-none',
+                expanded ? 'h-28' : 'h-10'
               )}
               placeholder={
                 activeProvider
-                  ? `发消息给 ${activeProvider.key} / ${model || "未选择模型"}`
-                  : "先配置可用 provider"
+                  ? `发消息给 ${activeProvider.key} / ${model || '未选择模型'}`
+                  : '先配置可用 provider'
               }
             />
             <TooltipProvider>
@@ -369,11 +348,7 @@ export function ChatPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Select
-                  value={model}
-                  onValueChange={setModel}
-                  disabled={!activeProvider}
-                >
+                <Select value={model} onValueChange={setModel} disabled={!activeProvider}>
                   <SelectTrigger className="h-9 w-48 rounded-full">
                     <SelectValue placeholder="选择 Model" />
                   </SelectTrigger>
@@ -402,7 +377,7 @@ export function ChatPage() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="top">
-                    {expanded ? "收起输入框" : "展开输入框"}
+                    {expanded ? '收起输入框' : '展开输入框'}
                   </TooltipContent>
                 </Tooltip>
                 <Tooltip>

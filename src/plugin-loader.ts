@@ -1,6 +1,6 @@
-import { resolve, join } from 'node:path';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import type { PluginConfig, ProviderConfig } from './config';
 import type { Plugin, PluginDefinition } from './plugin';
 
@@ -94,10 +94,12 @@ async function importPlugin(pkg: string, configDir: string): Promise<PluginDefin
   const mod = (await import(modulePath)) as Record<string, unknown>;
   const definition = (mod.default ?? mod) as PluginDefinition;
 
-  if (!definition || typeof definition.name !== 'string' || typeof definition.create !== 'function') {
-    throw new Error(
-      `插件 "${pkg}" 导出格式不正确，需导出包含 name 和 create 的 PluginDefinition`
-    );
+  if (
+    !definition ||
+    typeof definition.name !== 'string' ||
+    typeof definition.create !== 'function'
+  ) {
+    throw new Error(`插件 "${pkg}" 导出格式不正确，需导出包含 name 和 create 的 PluginDefinition`);
   }
 
   return definition;
@@ -120,7 +122,10 @@ export class PluginManager {
     providerName: string,
     providerConfig: ProviderConfig,
     pluginConfigs: PluginConfig[]
-  ): Promise<{ loaded: LoadedPlugin[]; failures: { provider: string; package: string; error: string }[] }> {
+  ): Promise<{
+    loaded: LoadedPlugin[];
+    failures: { provider: string; package: string; error: string }[];
+  }> {
     const loaded: LoadedPlugin[] = [];
     const failures: { provider: string; package: string; error: string }[] = [];
 
@@ -155,9 +160,7 @@ export class PluginManager {
    * 则替换为新插件链；如果有任何失败，则保留该 provider 的旧插件链。
    * 旧实例延迟 dispose 以保护 in-flight 请求。
    */
-  async reloadAll(
-    providers: Record<string, ProviderConfig>
-  ): Promise<ReloadResult> {
+  async reloadAll(providers: Record<string, ProviderConfig>): Promise<ReloadResult> {
     const newPlugins = new Map<string, LoadedPlugin[]>();
     const allFailures: { provider: string; package: string; error: string }[] = [];
     const oldPluginsToDispose: LoadedPlugin[] = [];
@@ -174,9 +177,7 @@ export class PluginManager {
 
         if (failures.length > 0) {
           // 该 provider 有加载失败，保留旧插件链，dispose 刚加载的新实例
-          console.warn(
-            `[plugin] provider "${providerName}" 有插件加载失败，保留旧插件链`
-          );
+          console.warn(`[plugin] provider "${providerName}" 有插件加载失败，保留旧插件链`);
           const oldLoaded = this.plugins.get(providerName);
           if (oldLoaded) {
             newPlugins.set(providerName, oldLoaded);
@@ -265,13 +266,5 @@ export class PluginManager {
         );
       }
     }
-  }
-
-  private async disposePluginMap(pluginMap: Map<string, LoadedPlugin[]>): Promise<void> {
-    const allPlugins: LoadedPlugin[] = [];
-    for (const [, loadedPlugins] of pluginMap) {
-      allPlugins.push(...loadedPlugins);
-    }
-    await this.disposePluginList(allPlugins);
   }
 }

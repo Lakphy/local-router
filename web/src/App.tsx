@@ -14,6 +14,7 @@ const PAGE_META: Record<string, { title: string; configPage: boolean }> = {
   '/chat': { title: '聊天面板', configPage: false },
   '/providers': { title: 'Providers', configPage: true },
   '/routes': { title: '路由', configPage: true },
+  '/general-settings': { title: '通用设置', configPage: true },
   '/logs-settings': { title: '日志配置', configPage: true },
   '/logs': { title: '日志检索', configPage: false },
   '/sessions': { title: '用户会话', configPage: false },

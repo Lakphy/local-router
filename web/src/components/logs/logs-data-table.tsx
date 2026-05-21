@@ -2,8 +2,8 @@ import {
   flexRender,
   getCoreRowModel,
   type Row,
-  type VisibilityState,
   useReactTable,
+  type VisibilityState,
 } from '@tanstack/react-table';
 import { useMemo, useState } from 'react';
 import {
@@ -56,12 +56,15 @@ export function LogsDataTable(props: {
         </TableHeader>
         <TableBody>
           {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map((row) => (
-              <DataRow key={row.id} row={row} onClick={onRowClick} />
-            ))
+            table
+              .getRowModel()
+              .rows.map((row) => <DataRow key={row.id} row={row} onClick={onRowClick} />)
           ) : (
             <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center text-sm text-muted-foreground">
+              <TableCell
+                colSpan={columns.length}
+                className="h-24 text-center text-sm text-muted-foreground"
+              >
                 暂无日志数据
               </TableCell>
             </TableRow>
@@ -82,7 +85,9 @@ function DataRow({
   return (
     <TableRow className="cursor-pointer" onClick={() => onClick(row.original)}>
       {row.getVisibleCells().map((cell) => (
-        <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+        <TableCell key={cell.id}>
+          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+        </TableCell>
       ))}
     </TableRow>
   );

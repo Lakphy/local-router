@@ -1,7 +1,7 @@
 import JsonView from '@uiw/react-json-view';
 import { useMemo } from 'react';
-import { cn } from '@/lib/utils';
 import { JSON_VIEW_STYLE, parseJsonCandidate, prettyJson } from '@/components/log-detail/utils';
+import { cn } from '@/lib/utils';
 
 interface StructuredDataBlockProps {
   value: unknown;
@@ -22,7 +22,9 @@ export function StructuredDataBlock({
 
   if (parsed.kind === 'empty') {
     return (
-      <div className={cn('rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground', className)}>
+      <div
+        className={cn('rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground', className)}
+      >
         {emptyText ?? '-'}
       </div>
     );
@@ -52,7 +54,9 @@ export function StructuredDataBlock({
   }
 
   const text =
-    parsed.kind === 'json-primitive' ? prettyJson(parsed.value) : (parsed.text ?? prettyJson(value));
+    parsed.kind === 'json-primitive'
+      ? prettyJson(parsed.value)
+      : (parsed.text ?? prettyJson(value));
 
   return (
     <pre

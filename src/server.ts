@@ -1,4 +1,6 @@
 import { createAppRuntimeFromConfigPath } from './index';
+import { REMOTE_ADDRESS_ENV_KEY } from './network-access';
+import { createServerAddressInfo } from './server-address';
 
 export interface StartServerOptions {
   configPath: string;
@@ -15,6 +17,10 @@ export interface RunningServer {
 }
 
 const DEFAULT_IDLE_TIMEOUT_SECONDS = 0;
+
+interface ServerWithRequestIp {
+  requestIP(request: Request): { address: string } | null;
+}
 
 function resolveIdleTimeoutSeconds(explicit?: number): number {
   if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit >= 0) {
@@ -35,10 +41,18 @@ function resolveIdleTimeoutSeconds(explicit?: number): number {
 }
 
 export async function startServer(options: StartServerOptions): Promise<RunningServer> {
-  const runtime = await createAppRuntimeFromConfigPath(options.configPath);
+  const runtime = await createAppRuntimeFromConfigPath(options.configPath, {
+    host: options.host,
+    port: options.port,
+  });
   const idleTimeout = resolveIdleTimeoutSeconds(options.idleTimeoutSeconds);
   const server = Bun.serve({
-    fetch: runtime.app.fetch,
+    fetch: (request: Request, server: ServerWithRequestIp) => {
+      const remoteAddress = server.requestIP(request)?.address ?? null;
+      return runtime.app.fetch(request, {
+        [REMOTE_ADDRESS_ENV_KEY]: remoteAddress,
+      });
+    },
     hostname: options.host,
     port: options.port,
     idleTimeout,
@@ -46,7 +60,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
 
   const host = server.hostname;
   const port = server.port;
-  const baseUrl = `http://${host}:${port}`;
+  const baseUrl = createServerAddressInfo(host, port).localUrl;
 
   return {
     host,

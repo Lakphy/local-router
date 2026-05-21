@@ -1,12 +1,12 @@
-import { createInterface } from 'node:readline/promises';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { createInterface } from 'node:readline/promises';
 import { parseArgs } from 'node:util';
 import JSON5 from 'json5';
 import type { AppConfig, ProviderConfig, ProviderType } from '../config';
 import { loadConfig, resolveConfigPath } from '../config';
 import { validateConfigOrThrow } from '../config-validate';
-import { cleanupIfStale, checkHealth } from './process';
+import { checkHealth, cleanupIfStale } from './process';
 import { readRuntimeState } from './runtime';
 
 function readConfig(configArg?: string): { path: string; config: AppConfig } {
@@ -36,7 +36,9 @@ function providerTypes(): ProviderType[] {
 async function selectFromList(title: string, items: string[]): Promise<string> {
   if (items.length === 0) throw new Error(`${title}: 无可选项`);
   console.log(`${title}:`);
-  items.forEach((item, i) => console.log(`  ${i + 1}) ${item}`));
+  items.forEach((item, i) => {
+    console.log(`  ${i + 1}) ${item}`);
+  });
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
     const answer = await rl.question('请输入序号: ');
@@ -92,18 +94,40 @@ function requireProvider(config: AppConfig, name: string): ProviderConfig {
 async function handleProvider(args: string[]): Promise<void> {
   const [sub, ...rest] = args;
   if (sub === 'list') {
-    const parsed = parseArgs({ args: rest, options: { json: { type: 'boolean', default: false }, config: { type: 'string' } }, allowPositionals: true, strict: false });
+    const parsed = parseArgs({
+      args: rest,
+      options: { json: { type: 'boolean', default: false }, config: { type: 'string' } },
+      allowPositionals: true,
+      strict: false,
+    });
     const { config } = readConfig(parsed.values.config);
-    const rows = Object.entries(config.providers).map(([name, p]) => ({ name, type: p.type, base: p.base, models: Object.keys(p.models).length, proxy: p.proxy ?? '' }));
+    const rows = Object.entries(config.providers).map(([name, p]) => ({
+      name,
+      type: p.type,
+      base: p.base,
+      models: Object.keys(p.models).length,
+      proxy: p.proxy ?? '',
+    }));
     if (parsed.values.json) return void console.log(JSON.stringify(rows, null, 2));
     console.log('NAME\tTYPE\tMODELS\tBASE');
-    rows.forEach((r) => console.log(`${r.name}\t${r.type}\t${r.models}\t${r.base}`));
+    rows.forEach((r) => {
+      console.log(`${r.name}\t${r.type}\t${r.models}\t${r.base}`);
+    });
     return;
   }
   if (sub === 'show') {
     const [name, ...flagArgs] = rest;
     if (!name) throw new Error('用法: config provider show <name>');
-    const parsed = parseArgs({ args: flagArgs, options: { json: { type: 'boolean', default: false }, 'show-secrets': { type: 'boolean', default: false }, config: { type: 'string' } }, allowPositionals: true, strict: false });
+    const parsed = parseArgs({
+      args: flagArgs,
+      options: {
+        json: { type: 'boolean', default: false },
+        'show-secrets': { type: 'boolean', default: false },
+        config: { type: 'string' },
+      },
+      allowPositionals: true,
+      strict: false,
+    });
     const { config } = readConfig(parsed.values.config);
     const p = requireProvider(config, name);
     const out = { ...p, apiKey: parsed.values['show-secrets'] ? p.apiKey : maskApiKey(p.apiKey) };
@@ -113,12 +137,30 @@ async function handleProvider(args: string[]): Promise<void> {
   }
   if (sub === 'add') {
     const [name, ...flagArgs] = rest;
-    if (!name) throw new Error('用法: config provider add <name> --type <type> --base <url> --api-key <key> --model <name>');
-    const parsed = parseArgs({ args: flagArgs, options: { type: { type: 'string' }, base: { type: 'string' }, 'api-key': { type: 'string' }, model: { type: 'string' }, 'image-input': { type: 'boolean', default: false }, reasoning: { type: 'boolean', default: false }, proxy: { type: 'string' }, config: { type: 'string' } }, allowPositionals: true, strict: false });
+    if (!name)
+      throw new Error(
+        '用法: config provider add <name> --type <type> --base <url> --api-key <key> --model <name>'
+      );
+    const parsed = parseArgs({
+      args: flagArgs,
+      options: {
+        type: { type: 'string' },
+        base: { type: 'string' },
+        'api-key': { type: 'string' },
+        model: { type: 'string' },
+        'image-input': { type: 'boolean', default: false },
+        reasoning: { type: 'boolean', default: false },
+        proxy: { type: 'string' },
+        config: { type: 'string' },
+      },
+      allowPositionals: true,
+      strict: false,
+    });
     const { path, config } = readConfig(parsed.values.config);
     if (config.providers[name]) throw new Error(`provider 已存在: ${name}`);
     const type = parsed.values.type as ProviderType | undefined;
-    if (!type || !providerTypes().includes(type)) throw new Error('type 必填且必须是 openai-completions/openai-responses/anthropic-messages');
+    if (!type || !providerTypes().includes(type))
+      throw new Error('type 必填且必须是 openai-completions/openai-responses/anthropic-messages');
     const base = parsed.values.base;
     const apiKey = parsed.values['api-key'];
     const firstModel = parsed.values.model;
@@ -142,7 +184,17 @@ async function handleProvider(args: string[]): Promise<void> {
   if (sub === 'set') {
     const [name, ...flagArgs] = rest;
     if (!name) throw new Error('用法: config provider set <name> [--base] [--api-key] [--proxy]');
-    const parsed = parseArgs({ args: flagArgs, options: { base: { type: 'string' }, 'api-key': { type: 'string' }, proxy: { type: 'string' }, config: { type: 'string' } }, allowPositionals: true, strict: false });
+    const parsed = parseArgs({
+      args: flagArgs,
+      options: {
+        base: { type: 'string' },
+        'api-key': { type: 'string' },
+        proxy: { type: 'string' },
+        config: { type: 'string' },
+      },
+      allowPositionals: true,
+      strict: false,
+    });
     const { path, config } = readConfig(parsed.values.config);
     const p = requireProvider(config, name);
     if (parsed.values.base) p.base = parsed.values.base;
@@ -155,7 +207,12 @@ async function handleProvider(args: string[]): Promise<void> {
   if (sub === 'remove') {
     const [name, ...flagArgs] = rest;
     if (!name) throw new Error('用法: config provider remove <name> [--force]');
-    const parsed = parseArgs({ args: flagArgs, options: { force: { type: 'boolean', default: false }, config: { type: 'string' } }, allowPositionals: true, strict: false });
+    const parsed = parseArgs({
+      args: flagArgs,
+      options: { force: { type: 'boolean', default: false }, config: { type: 'string' } },
+      allowPositionals: true,
+      strict: false,
+    });
     const { path, config } = readConfig(parsed.values.config);
     requireProvider(config, name);
     const referencedRoutes: Array<{ entry: string; match: string }> = [];
@@ -169,7 +226,9 @@ async function handleProvider(args: string[]): Promise<void> {
 
     if (referencedRoutes.length > 0 && !parsed.values.force) {
       const first = referencedRoutes[0];
-      throw new Error(`provider ${name} 被路由引用: ${first?.entry}.${first?.match}，如需删除并联动清理路由请加 --force`);
+      throw new Error(
+        `provider ${name} 被路由引用: ${first?.entry}.${first?.match}，如需删除并联动清理路由请加 --force`
+      );
     }
 
     if (parsed.values.force) {
@@ -208,9 +267,11 @@ async function handleProvider(args: string[]): Promise<void> {
       const p = requireProvider(config, provider);
       const rows = Object.entries(p.models).map(([name, caps]) => ({ name, ...caps }));
       if (parsed.values.json) return void console.log(JSON.stringify(rows, null, 2));
-      rows.forEach((r) =>
-        console.log(`${r.name}	image-input=${Boolean(r['image-input'])}	reasoning=${Boolean(r.reasoning)}`)
-      );
+      rows.forEach((r) => {
+        console.log(
+          `${r.name}	image-input=${Boolean(r['image-input'])}	reasoning=${Boolean(r.reasoning)}`
+        );
+      });
       return;
     }
 
@@ -284,7 +345,10 @@ async function handleProvider(args: string[]): Promise<void> {
   throw new Error(`未知子命令: provider ${sub ?? ''}`);
 }
 
-function renderRouteRows(config: AppConfig, entry?: string): Array<{ entry: string; match: string; provider: string; model: string }> {
+function renderRouteRows(
+  config: AppConfig,
+  entry?: string
+): Array<{ entry: string; match: string; provider: string; model: string }> {
   const rows: Array<{ entry: string; match: string; provider: string; model: string }> = [];
   for (const [entryName, modelMap] of Object.entries(config.routes)) {
     if (entry && entryName !== entry) continue;
@@ -298,29 +362,58 @@ function renderRouteRows(config: AppConfig, entry?: string): Array<{ entry: stri
 async function handleRoute(args: string[]): Promise<void> {
   const [sub, ...rest] = args;
   if (sub === 'list') {
-    const parsed = parseArgs({ args: rest, options: { entry: { type: 'string' }, json: { type: 'boolean', default: false }, config: { type: 'string' } }, allowPositionals: true, strict: false });
+    const parsed = parseArgs({
+      args: rest,
+      options: {
+        entry: { type: 'string' },
+        json: { type: 'boolean', default: false },
+        config: { type: 'string' },
+      },
+      allowPositionals: true,
+      strict: false,
+    });
     const { config } = readConfig(parsed.values.config);
     const rows = renderRouteRows(config, parsed.values.entry);
     if (parsed.values.json) return void console.log(JSON.stringify(rows, null, 2));
     console.log('ENTRY\tMATCH\tTARGET');
-    rows.forEach((r) => console.log(`${r.entry}\t${r.match}\t${r.provider}/${r.model}`));
+    rows.forEach((r) => {
+      console.log(`${r.entry}\t${r.match}\t${r.provider}/${r.model}`);
+    });
     return;
   }
   if (sub === 'show') {
     const [entry, ...flagArgs] = rest;
     if (!entry) throw new Error('用法: config route show <entry>');
-    const parsed = parseArgs({ args: flagArgs, options: { json: { type: 'boolean', default: false }, config: { type: 'string' } }, allowPositionals: true, strict: false });
+    const parsed = parseArgs({
+      args: flagArgs,
+      options: { json: { type: 'boolean', default: false }, config: { type: 'string' } },
+      allowPositionals: true,
+      strict: false,
+    });
     const { config } = readConfig(parsed.values.config);
     const modelMap = config.routes[entry];
     if (!modelMap) throw new Error(`route entry 不存在: ${entry}`);
     if (parsed.values.json) return void console.log(JSON.stringify(modelMap, null, 2));
-    Object.entries(modelMap).forEach(([match, target]) => console.log(`${entry}.${match} -> ${target.provider}/${target.model}`));
+    Object.entries(modelMap).forEach(([match, target]) => {
+      console.log(`${entry}.${match} -> ${target.provider}/${target.model}`);
+    });
     return;
   }
   if (sub === 'set') {
     const [entry, matchModel, ...flagArgs] = rest;
-    if (!entry || !matchModel) throw new Error('用法: config route set <entry> <match-model> [--provider] [--model]');
-    const parsed = parseArgs({ args: flagArgs, options: { provider: { type: 'string' }, model: { type: 'string' }, interactive: { type: 'boolean', default: false }, config: { type: 'string' } }, allowPositionals: true, strict: false });
+    if (!entry || !matchModel)
+      throw new Error('用法: config route set <entry> <match-model> [--provider] [--model]');
+    const parsed = parseArgs({
+      args: flagArgs,
+      options: {
+        provider: { type: 'string' },
+        model: { type: 'string' },
+        interactive: { type: 'boolean', default: false },
+        config: { type: 'string' },
+      },
+      allowPositionals: true,
+      strict: false,
+    });
     const { path, config } = readConfig(parsed.values.config);
 
     let provider = parsed.values.provider;
@@ -338,12 +431,15 @@ async function handleRoute(args: string[]): Promise<void> {
       const p = requireProvider(config, provider);
       const models = Object.keys(p.models);
       if (models.length === 0) {
-        throw new Error(`provider ${provider} 没有可选 model，请先执行: local-router config provider model add ${provider} <model>`);
+        throw new Error(
+          `provider ${provider} 没有可选 model，请先执行: local-router config provider model add ${provider} <model>`
+        );
       }
       model = await selectFromList(`请选择 ${provider} 的 model`, models);
     }
 
-    if (!provider || !model) throw new Error('provider/model 必填；可通过 --provider/--model 指定，或使用交互模式');
+    if (!provider || !model)
+      throw new Error('provider/model 必填；可通过 --provider/--model 指定，或使用交互模式');
     const p = requireProvider(config, provider);
     if (!p.models[model]) throw new Error(`model 不存在于 provider: ${provider}/${model}`);
 
@@ -355,8 +451,17 @@ async function handleRoute(args: string[]): Promise<void> {
   }
   if (sub === 'remove') {
     const [entry, matchModel, ...flagArgs] = rest;
-    if (!entry || !matchModel) throw new Error('用法: config route remove <entry> <match-model> [--allow-remove-fallback]');
-    const parsed = parseArgs({ args: flagArgs, options: { 'allow-remove-fallback': { type: 'boolean', default: false }, config: { type: 'string' } }, allowPositionals: true, strict: false });
+    if (!entry || !matchModel)
+      throw new Error('用法: config route remove <entry> <match-model> [--allow-remove-fallback]');
+    const parsed = parseArgs({
+      args: flagArgs,
+      options: {
+        'allow-remove-fallback': { type: 'boolean', default: false },
+        config: { type: 'string' },
+      },
+      allowPositionals: true,
+      strict: false,
+    });
     const { path, config } = readConfig(parsed.values.config);
     const modelMap = config.routes[entry];
     if (!modelMap || !modelMap[matchModel]) throw new Error(`路由不存在: ${entry}.${matchModel}`);
@@ -372,10 +477,21 @@ async function handleRoute(args: string[]): Promise<void> {
 }
 
 async function handleResolve(args: string[]): Promise<void> {
-  const parsed = parseArgs({ args, options: { entry: { type: 'string' }, model: { type: 'string' }, json: { type: 'boolean', default: false }, config: { type: 'string' } }, allowPositionals: true, strict: false });
+  const parsed = parseArgs({
+    args,
+    options: {
+      entry: { type: 'string' },
+      model: { type: 'string' },
+      json: { type: 'boolean', default: false },
+      config: { type: 'string' },
+    },
+    allowPositionals: true,
+    strict: false,
+  });
   const entry = parsed.values.entry;
   const reqModel = parsed.values.model;
-  if (!entry || !reqModel) throw new Error('用法: config resolve --entry <entry> --model <request-model>');
+  if (!entry || !reqModel)
+    throw new Error('用法: config resolve --entry <entry> --model <request-model>');
   const { config } = readConfig(parsed.values.config);
   const modelMap = config.routes[entry];
   if (!modelMap) throw new Error(`route entry 不存在: ${entry}`);
@@ -383,7 +499,13 @@ async function handleResolve(args: string[]): Promise<void> {
   const target = modelMap[hit];
   if (!target) throw new Error(`未命中路由且缺少兜底: ${entry}`);
   const provider = requireProvider(config, target.provider);
-  const payload = { matchedRule: `${entry}.${hit}`, provider: target.provider, targetModel: target.model, providerType: provider.type, providerBase: provider.base };
+  const payload = {
+    matchedRule: `${entry}.${hit}`,
+    provider: target.provider,
+    targetModel: target.model,
+    providerType: provider.type,
+    providerBase: provider.base,
+  };
   if (parsed.values.json) return void console.log(JSON.stringify(payload, null, 2));
   console.log(`匹配规则: ${payload.matchedRule}`);
   console.log(`命中 provider: ${payload.provider}`);
@@ -392,7 +514,12 @@ async function handleResolve(args: string[]): Promise<void> {
 }
 
 async function handleValidate(args: string[]): Promise<void> {
-  const parsed = parseArgs({ args, options: { config: { type: 'string' } }, allowPositionals: true, strict: false });
+  const parsed = parseArgs({
+    args,
+    options: { config: { type: 'string' } },
+    allowPositionals: true,
+    strict: false,
+  });
   const { config, path } = readConfig(parsed.values.config);
   validateConfigOrThrow(config);
   console.log(`配置校验通过: ${path}`);

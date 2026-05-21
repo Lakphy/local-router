@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, Navigate } from '@tanstack/
 import App from '@/App';
 import { ChatPage } from '@/pages/chat';
 import { DashboardPage } from '@/pages/dashboard';
+import { GeneralSettingsPage } from '@/pages/general-settings';
 import { LogDetailPage } from '@/pages/log-detail';
 import { LogsPage } from '@/pages/logs';
 import { LogsSettingsPage } from '@/pages/logs-settings';
@@ -43,6 +44,12 @@ const routesRoute = createRoute({
   component: RoutesPage,
 });
 
+const generalSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/general-settings',
+  component: GeneralSettingsPage,
+});
+
 const logsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/logs',
@@ -77,6 +84,7 @@ const routeTree = rootRoute.addChildren([
   chatRoute,
   providersRoute,
   routesRoute,
+  generalSettingsRoute,
   logsRoute,
   sessionsRoute,
   logDetailRoute,

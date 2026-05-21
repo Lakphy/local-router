@@ -139,7 +139,10 @@ export function restoreLocalRouterBody(detail: LogEventDetail): unknown {
   };
 }
 
-export function buildCurlCommand(detail: LogEventDetail, mode: 'local-router' | 'provider'): string {
+export function buildCurlCommand(
+  detail: LogEventDetail,
+  mode: 'local-router' | 'provider'
+): string {
   const url =
     mode === 'provider'
       ? detail.upstream.targetUrl

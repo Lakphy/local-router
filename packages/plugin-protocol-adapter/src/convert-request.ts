@@ -4,10 +4,7 @@
  * 方向：将客户端发送的 sourceFormat 请求体转换为上游 provider 期望的 targetFormat。
  */
 
-export type ProtocolFormat =
-  | 'openai-completions'
-  | 'openai-responses'
-  | 'anthropic-messages';
+export type ProtocolFormat = 'openai-completions' | 'openai-responses' | 'anthropic-messages';
 
 // ─── 通用类型 ─────────────────────────────────────────────────────────────────
 
@@ -20,7 +17,7 @@ interface AnyRecord {
 export function convertRequestBody(
   body: Record<string, unknown>,
   from: ProtocolFormat,
-  to: ProtocolFormat,
+  to: ProtocolFormat
 ): Record<string, unknown> {
   if (from === to) return body;
 
@@ -167,7 +164,8 @@ function anthropicToCompletions(body: AnyRecord): AnyRecord {
     const tc = body.tool_choice as AnyRecord;
     if (tc.type === 'auto') result.tool_choice = 'auto';
     else if (tc.type === 'any') result.tool_choice = 'required';
-    else if (tc.type === 'tool') result.tool_choice = { type: 'function', function: { name: tc.name } };
+    else if (tc.type === 'tool')
+      result.tool_choice = { type: 'function', function: { name: tc.name } };
   }
   // stream_options for stream usage
   if (body.stream === true) {
@@ -217,7 +215,10 @@ function completionsToAnthropic(body: AnyRecord): AnyRecord {
 
     if (role === 'system') {
       // 系统消息提取到 system 字段
-      const text = typeof msg.content === 'string' ? msg.content : contentPartsToText(msg.content as AnyRecord[]);
+      const text =
+        typeof msg.content === 'string'
+          ? msg.content
+          : contentPartsToText(msg.content as AnyRecord[]);
       system = system ? `${system}\n${text}` : text;
       continue;
     }
@@ -459,7 +460,10 @@ function completionsToResponses(body: AnyRecord): AnyRecord {
     const role = msg.role as string;
 
     if (role === 'system') {
-      const text = typeof msg.content === 'string' ? msg.content : contentPartsToText(msg.content as AnyRecord[]);
+      const text =
+        typeof msg.content === 'string'
+          ? msg.content
+          : contentPartsToText(msg.content as AnyRecord[]);
       instructions = instructions ? `${instructions}\n${text}` : text;
       continue;
     }
@@ -510,7 +514,12 @@ function completionsToResponses(body: AnyRecord): AnyRecord {
   if (body.tools) {
     result.tools = (body.tools as AnyRecord[]).map((t) => {
       const fn = (t.function ?? t) as AnyRecord;
-      return { type: 'function', name: fn.name, description: fn.description, parameters: fn.parameters };
+      return {
+        type: 'function',
+        name: fn.name,
+        description: fn.description,
+        parameters: fn.parameters,
+      };
     });
   }
   if (body.tool_choice != null) result.tool_choice = body.tool_choice;
@@ -623,10 +632,7 @@ function responsesToAnthropic(body: AnyRecord): AnyRecord {
   return result;
 }
 
-function convertResponsesContentToAnthropicBlocks(
-  content: unknown,
-  role: string,
-): AnyRecord[] {
+function convertResponsesContentToAnthropicBlocks(content: unknown, _role: string): AnyRecord[] {
   if (typeof content === 'string') {
     return [{ type: 'text', text: content }];
   }
@@ -691,7 +697,8 @@ function responsesToCompletions(body: AnyRecord): AnyRecord {
         messages.push({
           role: 'tool',
           tool_call_id: item.call_id,
-          content: typeof item.output === 'string' ? item.output : JSON.stringify(item.output ?? ''),
+          content:
+            typeof item.output === 'string' ? item.output : JSON.stringify(item.output ?? ''),
         });
       } else {
         // message item

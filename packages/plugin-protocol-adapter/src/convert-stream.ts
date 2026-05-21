@@ -21,7 +21,7 @@ interface AnyRecord {
 export function createStreamTransform(
   source: ProtocolFormat,
   target: ProtocolFormat,
-  modelName: string,
+  modelName: string
 ): TransformStream<Uint8Array, Uint8Array> | null {
   if (source === target) return null;
 
@@ -108,7 +108,7 @@ function encodeSSEJson(obj: unknown, event?: string): string {
 // ─── OpenAI Completions Stream → Anthropic Messages Stream ───────────────────
 
 function createCompletionsToAnthropicStream(
-  modelName: string,
+  modelName: string
 ): TransformStream<Uint8Array, Uint8Array> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -121,7 +121,7 @@ function createCompletionsToAnthropicStream(
   let outputTokens = 0;
 
   // 处理 tool_calls 的累积状态
-  let pendingToolCalls: Map<number, { id: string; name: string; arguments: string }> = new Map();
+  const pendingToolCalls: Map<number, { id: string; name: string; arguments: string }> = new Map();
 
   return new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
@@ -133,7 +133,12 @@ function createCompletionsToAnthropicStream(
           // 关闭所有未关闭的 content blocks
           if (contentBlockStartSent) {
             controller.enqueue(
-              encoder.encode(encodeSSEJson({ type: 'content_block_stop', index: contentBlockIndex }, 'content_block_stop'))
+              encoder.encode(
+                encodeSSEJson(
+                  { type: 'content_block_stop', index: contentBlockIndex },
+                  'content_block_stop'
+                )
+              )
             );
             contentBlockStartSent = false;
           }
@@ -147,12 +152,12 @@ function createCompletionsToAnthropicStream(
                   delta: { stop_reason: 'end_turn', stop_sequence: null },
                   usage: { output_tokens: outputTokens },
                 },
-                'message_delta',
-              ),
-            ),
+                'message_delta'
+              )
+            )
           );
           controller.enqueue(
-            encoder.encode(encodeSSEJson({ type: 'message_stop' }, 'message_stop')),
+            encoder.encode(encodeSSEJson({ type: 'message_stop' }, 'message_stop'))
           );
           continue;
         }
@@ -196,9 +201,9 @@ function createCompletionsToAnthropicStream(
                     usage: { input_tokens: inputTokens, output_tokens: 0 },
                   },
                 },
-                'message_start',
-              ),
-            ),
+                'message_start'
+              )
+            )
           );
           messageStartSent = true;
         }
@@ -214,7 +219,12 @@ function createCompletionsToAnthropicStream(
               // 新 tool_call 开始，先关闭之前的 content block
               if (contentBlockStartSent) {
                 controller.enqueue(
-                  encoder.encode(encodeSSEJson({ type: 'content_block_stop', index: contentBlockIndex }, 'content_block_stop'))
+                  encoder.encode(
+                    encodeSSEJson(
+                      { type: 'content_block_stop', index: contentBlockIndex },
+                      'content_block_stop'
+                    )
+                  )
                 );
                 contentBlockIndex++;
                 contentBlockStartSent = false;
@@ -232,16 +242,17 @@ function createCompletionsToAnthropicStream(
                       index: contentBlockIndex,
                       content_block: { type: 'tool_use', id: toolId, name: toolName, input: {} },
                     },
-                    'content_block_start',
-                  ),
-                ),
+                    'content_block_start'
+                  )
+                )
               );
               contentBlockStartSent = true;
             }
 
             // 累积 arguments
             if (fn?.arguments) {
-              const tc = pendingToolCalls.get(tcIndex)!;
+              const tc = pendingToolCalls.get(tcIndex);
+              if (!tc) continue;
               tc.arguments += fn.arguments as string;
 
               controller.enqueue(
@@ -252,9 +263,9 @@ function createCompletionsToAnthropicStream(
                       index: contentBlockIndex,
                       delta: { type: 'input_json_delta', partial_json: fn.arguments },
                     },
-                    'content_block_delta',
-                  ),
-                ),
+                    'content_block_delta'
+                  )
+                )
               );
             }
           }
@@ -272,9 +283,9 @@ function createCompletionsToAnthropicStream(
                     index: contentBlockIndex,
                     content_block: { type: 'text', text: '' },
                   },
-                  'content_block_start',
-                ),
-              ),
+                  'content_block_start'
+                )
+              )
             );
             contentBlockStartSent = true;
           }
@@ -287,9 +298,9 @@ function createCompletionsToAnthropicStream(
                   index: contentBlockIndex,
                   delta: { type: 'text_delta', text: delta.content },
                 },
-                'content_block_delta',
-              ),
-            ),
+                'content_block_delta'
+              )
+            )
           );
         }
 
@@ -297,7 +308,12 @@ function createCompletionsToAnthropicStream(
         if (finishReason) {
           if (contentBlockStartSent) {
             controller.enqueue(
-              encoder.encode(encodeSSEJson({ type: 'content_block_stop', index: contentBlockIndex }, 'content_block_stop'))
+              encoder.encode(
+                encodeSSEJson(
+                  { type: 'content_block_stop', index: contentBlockIndex },
+                  'content_block_stop'
+                )
+              )
             );
             contentBlockStartSent = false;
           }
@@ -315,18 +331,18 @@ function createCompletionsToAnthropicStream(
                   delta: { stop_reason: stopReason, stop_sequence: null },
                   usage: { output_tokens: outputTokens },
                 },
-                'message_delta',
-              ),
-            ),
+                'message_delta'
+              )
+            )
           );
           controller.enqueue(
-            encoder.encode(encodeSSEJson({ type: 'message_stop' }, 'message_stop')),
+            encoder.encode(encodeSSEJson({ type: 'message_stop' }, 'message_stop'))
           );
         }
       }
     },
 
-    flush(controller) {
+    flush(_controller) {
       const remaining = parser.flush();
       // 通常不会有剩余，但确保 message_stop 已发送
       if (messageStartSent && remaining.length === 0) {
@@ -339,14 +355,13 @@ function createCompletionsToAnthropicStream(
 // ─── Anthropic Messages Stream → OpenAI Completions Stream ───────────────────
 
 function createAnthropicToCompletionsStream(
-  modelName: string,
+  modelName: string
 ): TransformStream<Uint8Array, Uint8Array> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   const parser = new SSEParser();
   const chatId = `chatcmpl-${crypto.randomUUID()}`;
   const created = Math.floor(Date.now() / 1000);
-  let firstChunkSent = false;
   let currentBlockType = '';
   let toolCallIndex = -1;
 
@@ -378,12 +393,13 @@ function createAnthropicToCompletionsStream(
                     object: 'chat.completion.chunk',
                     created,
                     model,
-                    choices: [{ index: 0, delta: { role: 'assistant', content: '' }, finish_reason: null }],
-                  }),
-                ),
-              ),
+                    choices: [
+                      { index: 0, delta: { role: 'assistant', content: '' }, finish_reason: null },
+                    ],
+                  })
+                )
+              )
             );
-            firstChunkSent = true;
             break;
           }
 
@@ -417,9 +433,9 @@ function createAnthropicToCompletionsStream(
                           finish_reason: null,
                         },
                       ],
-                    }),
-                  ),
-                ),
+                    })
+                  )
+                )
               );
             }
             break;
@@ -438,9 +454,9 @@ function createAnthropicToCompletionsStream(
                       created,
                       model: modelName,
                       choices: [{ index: 0, delta: { content: delta.text }, finish_reason: null }],
-                    }),
-                  ),
-                ),
+                    })
+                  )
+                )
               );
             } else if (delta.type === 'input_json_delta') {
               controller.enqueue(
@@ -462,9 +478,9 @@ function createAnthropicToCompletionsStream(
                           finish_reason: null,
                         },
                       ],
-                    }),
-                  ),
-                ),
+                    })
+                  )
+                )
               );
             }
             break;
@@ -492,11 +508,17 @@ function createAnthropicToCompletionsStream(
                     model: modelName,
                     choices: [{ index: 0, delta: {}, finish_reason: finishReason }],
                     ...(usage.output_tokens != null
-                      ? { usage: { prompt_tokens: 0, completion_tokens: usage.output_tokens, total_tokens: usage.output_tokens } }
+                      ? {
+                          usage: {
+                            prompt_tokens: 0,
+                            completion_tokens: usage.output_tokens,
+                            total_tokens: usage.output_tokens,
+                          },
+                        }
                       : {}),
-                  }),
-                ),
-              ),
+                  })
+                )
+              )
             );
             break;
           }
@@ -513,7 +535,7 @@ function createAnthropicToCompletionsStream(
       }
     },
 
-    flush(controller) {
+    flush(_controller) {
       parser.flush();
     },
   });
@@ -522,7 +544,7 @@ function createAnthropicToCompletionsStream(
 // ─── OpenAI Responses Stream → Anthropic Messages Stream ─────────────────────
 
 function createResponsesToAnthropicStream(
-  modelName: string,
+  modelName: string
 ): TransformStream<Uint8Array, Uint8Array> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -530,179 +552,189 @@ function createResponsesToAnthropicStream(
   let messageSent = false;
   let contentBlockIndex = 0;
 
+  function handleEvent(sse: SSEEvent, controller: TransformStreamDefaultController<Uint8Array>) {
+    if (sse.data === '[DONE]') return;
+
+    let data: AnyRecord;
+    try {
+      data = JSON.parse(sse.data) as AnyRecord;
+    } catch {
+      return;
+    }
+
+    const eventType = (data.type as string) ?? sse.event;
+
+    switch (eventType) {
+      case 'response.created': {
+        const resp = (data.response ?? data) as AnyRecord;
+        if (!messageSent) {
+          controller.enqueue(
+            encoder.encode(
+              encodeSSEJson(
+                {
+                  type: 'message_start',
+                  message: {
+                    id: (resp.id as string) ?? `msg_${crypto.randomUUID()}`,
+                    type: 'message',
+                    role: 'assistant',
+                    model: (resp.model as string) ?? modelName,
+                    content: [],
+                    stop_reason: null,
+                    stop_sequence: null,
+                    usage: { input_tokens: 0, output_tokens: 0 },
+                  },
+                },
+                'message_start'
+              )
+            )
+          );
+          messageSent = true;
+        }
+        break;
+      }
+
+      case 'response.output_item.added': {
+        const item = (data.item ?? {}) as AnyRecord;
+        if (item.type === 'function_call') {
+          controller.enqueue(
+            encoder.encode(
+              encodeSSEJson(
+                {
+                  type: 'content_block_start',
+                  index: contentBlockIndex,
+                  content_block: {
+                    type: 'tool_use',
+                    id:
+                      (item.call_id as string) ??
+                      (item.id as string) ??
+                      `toolu_${contentBlockIndex}`,
+                    name: (item.name as string) ?? '',
+                    input: {},
+                  },
+                },
+                'content_block_start'
+              )
+            )
+          );
+        }
+        break;
+      }
+
+      case 'response.content_part.added': {
+        const part = (data.part ?? {}) as AnyRecord;
+        if (part.type === 'output_text') {
+          controller.enqueue(
+            encoder.encode(
+              encodeSSEJson(
+                {
+                  type: 'content_block_start',
+                  index: contentBlockIndex,
+                  content_block: { type: 'text', text: '' },
+                },
+                'content_block_start'
+              )
+            )
+          );
+        }
+        break;
+      }
+
+      case 'response.output_text.delta': {
+        const delta = (data.delta ?? '') as string;
+        if (delta) {
+          controller.enqueue(
+            encoder.encode(
+              encodeSSEJson(
+                {
+                  type: 'content_block_delta',
+                  index: contentBlockIndex,
+                  delta: { type: 'text_delta', text: delta },
+                },
+                'content_block_delta'
+              )
+            )
+          );
+        }
+        break;
+      }
+
+      case 'response.function_call_arguments.delta': {
+        const delta = (data.delta ?? '') as string;
+        if (delta) {
+          controller.enqueue(
+            encoder.encode(
+              encodeSSEJson(
+                {
+                  type: 'content_block_delta',
+                  index: contentBlockIndex,
+                  delta: { type: 'input_json_delta', partial_json: delta },
+                },
+                'content_block_delta'
+              )
+            )
+          );
+        }
+        break;
+      }
+
+      case 'response.content_part.done':
+      case 'response.function_call_arguments.done': {
+        controller.enqueue(
+          encoder.encode(
+            encodeSSEJson(
+              { type: 'content_block_stop', index: contentBlockIndex },
+              'content_block_stop'
+            )
+          )
+        );
+        contentBlockIndex++;
+        break;
+      }
+
+      case 'response.completed': {
+        const resp = (data.response ?? data) as AnyRecord;
+        const usage = (resp.usage ?? {}) as AnyRecord;
+        const output = resp.output as AnyRecord[] | undefined;
+        const hasFunctionCall = output?.some((o) => o.type === 'function_call') ?? false;
+
+        controller.enqueue(
+          encoder.encode(
+            encodeSSEJson(
+              {
+                type: 'message_delta',
+                delta: {
+                  stop_reason: hasFunctionCall ? 'tool_use' : 'end_turn',
+                  stop_sequence: null,
+                },
+                usage: { output_tokens: (usage.output_tokens as number) ?? 0 },
+              },
+              'message_delta'
+            )
+          )
+        );
+        controller.enqueue(encoder.encode(encodeSSEJson({ type: 'message_stop' }, 'message_stop')));
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
+
   return new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
       const text = decoder.decode(chunk, { stream: true });
       const events = parser.feed(text);
 
       for (const sse of events) {
-        if (sse.data === '[DONE]') continue;
-
-        let data: AnyRecord;
-        try {
-          data = JSON.parse(sse.data) as AnyRecord;
-        } catch {
-          continue;
-        }
-
-        const eventType = (data.type as string) ?? sse.event;
-
-        switch (eventType) {
-          case 'response.created': {
-            const resp = (data.response ?? data) as AnyRecord;
-            if (!messageSent) {
-              controller.enqueue(
-                encoder.encode(
-                  encodeSSEJson(
-                    {
-                      type: 'message_start',
-                      message: {
-                        id: (resp.id as string) ?? `msg_${crypto.randomUUID()}`,
-                        type: 'message',
-                        role: 'assistant',
-                        model: (resp.model as string) ?? modelName,
-                        content: [],
-                        stop_reason: null,
-                        stop_sequence: null,
-                        usage: { input_tokens: 0, output_tokens: 0 },
-                      },
-                    },
-                    'message_start',
-                  ),
-                ),
-              );
-              messageSent = true;
-            }
-            break;
-          }
-
-          case 'response.output_item.added': {
-            const item = (data.item ?? {}) as AnyRecord;
-            if (item.type === 'function_call') {
-              controller.enqueue(
-                encoder.encode(
-                  encodeSSEJson(
-                    {
-                      type: 'content_block_start',
-                      index: contentBlockIndex,
-                      content_block: {
-                        type: 'tool_use',
-                        id: (item.call_id as string) ?? (item.id as string) ?? `toolu_${contentBlockIndex}`,
-                        name: (item.name as string) ?? '',
-                        input: {},
-                      },
-                    },
-                    'content_block_start',
-                  ),
-                ),
-              );
-            }
-            break;
-          }
-
-          case 'response.content_part.added': {
-            const part = (data.part ?? {}) as AnyRecord;
-            if (part.type === 'output_text') {
-              controller.enqueue(
-                encoder.encode(
-                  encodeSSEJson(
-                    {
-                      type: 'content_block_start',
-                      index: contentBlockIndex,
-                      content_block: { type: 'text', text: '' },
-                    },
-                    'content_block_start',
-                  ),
-                ),
-              );
-            }
-            break;
-          }
-
-          case 'response.output_text.delta': {
-            const delta = (data.delta ?? '') as string;
-            if (delta) {
-              controller.enqueue(
-                encoder.encode(
-                  encodeSSEJson(
-                    {
-                      type: 'content_block_delta',
-                      index: contentBlockIndex,
-                      delta: { type: 'text_delta', text: delta },
-                    },
-                    'content_block_delta',
-                  ),
-                ),
-              );
-            }
-            break;
-          }
-
-          case 'response.function_call_arguments.delta': {
-            const delta = (data.delta ?? '') as string;
-            if (delta) {
-              controller.enqueue(
-                encoder.encode(
-                  encodeSSEJson(
-                    {
-                      type: 'content_block_delta',
-                      index: contentBlockIndex,
-                      delta: { type: 'input_json_delta', partial_json: delta },
-                    },
-                    'content_block_delta',
-                  ),
-                ),
-              );
-            }
-            break;
-          }
-
-          case 'response.content_part.done':
-          case 'response.function_call_arguments.done': {
-            controller.enqueue(
-              encoder.encode(
-                encodeSSEJson({ type: 'content_block_stop', index: contentBlockIndex }, 'content_block_stop'),
-              ),
-            );
-            contentBlockIndex++;
-            break;
-          }
-
-          case 'response.completed': {
-            const resp = (data.response ?? data) as AnyRecord;
-            const usage = (resp.usage ?? {}) as AnyRecord;
-            const output = resp.output as AnyRecord[] | undefined;
-            const hasFunctionCall = output?.some((o) => o.type === 'function_call') ?? false;
-
-            controller.enqueue(
-              encoder.encode(
-                encodeSSEJson(
-                  {
-                    type: 'message_delta',
-                    delta: {
-                      stop_reason: hasFunctionCall ? 'tool_use' : 'end_turn',
-                      stop_sequence: null,
-                    },
-                    usage: { output_tokens: (usage.output_tokens as number) ?? 0 },
-                  },
-                  'message_delta',
-                ),
-              ),
-            );
-            controller.enqueue(
-              encoder.encode(encodeSSEJson({ type: 'message_stop' }, 'message_stop')),
-            );
-            break;
-          }
-
-          default:
-            break;
-        }
+        handleEvent(sse, controller);
       }
     },
 
     flush(controller) {
-      parser.flush();
+      for (const sse of parser.flush()) {
+        handleEvent(sse, controller);
+      }
     },
   });
 }
@@ -710,7 +742,7 @@ function createResponsesToAnthropicStream(
 // ─── Anthropic Messages Stream → OpenAI Responses Stream ─────────────────────
 
 function createAnthropicToResponsesStream(
-  modelName: string,
+  modelName: string
 ): TransformStream<Uint8Array, Uint8Array> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -718,7 +750,7 @@ function createAnthropicToResponsesStream(
   const respId = `resp_${crypto.randomUUID()}`;
   let responseCreatedSent = false;
   let currentBlockType = '';
-  let msgItemId = `msg_${crypto.randomUUID()}`;
+  const msgItemId = `msg_${crypto.randomUUID()}`;
   let outputItemIndex = 0;
   let contentPartIndex = 0;
   let fullText = '';
@@ -756,9 +788,9 @@ function createAnthropicToResponsesStream(
                         output: [],
                       },
                     }),
-                    'response.created',
-                  ),
-                ),
+                    'response.created'
+                  )
+                )
               );
               responseCreatedSent = true;
             }
@@ -785,9 +817,9 @@ function createAnthropicToResponsesStream(
                         content: [],
                       },
                     }),
-                    'response.output_item.added',
-                  ),
-                ),
+                    'response.output_item.added'
+                  )
+                )
               );
               controller.enqueue(
                 encoder.encode(
@@ -799,9 +831,9 @@ function createAnthropicToResponsesStream(
                       content_index: contentPartIndex,
                       part: { type: 'output_text', text: '', annotations: [] },
                     }),
-                    'response.content_part.added',
-                  ),
-                ),
+                    'response.content_part.added'
+                  )
+                )
               );
               fullText = '';
             } else if (currentBlockType === 'tool_use') {
@@ -820,9 +852,9 @@ function createAnthropicToResponsesStream(
                         status: 'in_progress',
                       },
                     }),
-                    'response.output_item.added',
-                  ),
-                ),
+                    'response.output_item.added'
+                  )
+                )
               );
             }
             break;
@@ -844,9 +876,9 @@ function createAnthropicToResponsesStream(
                       content_index: contentPartIndex,
                       delta: textDelta,
                     }),
-                    'response.output_text.delta',
-                  ),
-                ),
+                    'response.output_text.delta'
+                  )
+                )
               );
             } else if (delta.type === 'input_json_delta') {
               controller.enqueue(
@@ -857,9 +889,9 @@ function createAnthropicToResponsesStream(
                       output_index: outputItemIndex,
                       delta: delta.partial_json,
                     }),
-                    'response.function_call_arguments.delta',
-                  ),
-                ),
+                    'response.function_call_arguments.delta'
+                  )
+                )
               );
             }
             break;
@@ -877,9 +909,9 @@ function createAnthropicToResponsesStream(
                       content_index: contentPartIndex,
                       text: fullText,
                     }),
-                    'response.output_text.done',
-                  ),
-                ),
+                    'response.output_text.done'
+                  )
+                )
               );
               controller.enqueue(
                 encoder.encode(
@@ -891,9 +923,9 @@ function createAnthropicToResponsesStream(
                       content_index: contentPartIndex,
                       part: { type: 'output_text', text: fullText, annotations: [] },
                     }),
-                    'response.content_part.done',
-                  ),
-                ),
+                    'response.content_part.done'
+                  )
+                )
               );
               contentPartIndex++;
             } else if (currentBlockType === 'tool_use') {
@@ -904,9 +936,9 @@ function createAnthropicToResponsesStream(
                       type: 'response.function_call_arguments.done',
                       output_index: outputItemIndex,
                     }),
-                    'response.function_call_arguments.done',
-                  ),
-                ),
+                    'response.function_call_arguments.done'
+                  )
+                )
               );
             }
             outputItemIndex++;
@@ -933,9 +965,9 @@ function createAnthropicToResponsesStream(
                       output: [],
                     },
                   }),
-                  'response.completed',
-                ),
-              ),
+                  'response.completed'
+                )
+              )
             );
             break;
           }
@@ -946,7 +978,7 @@ function createAnthropicToResponsesStream(
       }
     },
 
-    flush(controller) {
+    flush(_controller) {
       parser.flush();
     },
   });
@@ -955,7 +987,7 @@ function createAnthropicToResponsesStream(
 // ─── OpenAI Completions Stream → OpenAI Responses Stream ─────────────────────
 
 function createCompletionsToResponsesStream(
-  modelName: string,
+  modelName: string
 ): TransformStream<Uint8Array, Uint8Array> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -990,9 +1022,9 @@ function createCompletionsToResponsesStream(
                     output: [],
                   },
                 }),
-                'response.completed',
-              ),
-            ),
+                'response.completed'
+              )
+            )
           );
           continue;
         }
@@ -1027,9 +1059,9 @@ function createCompletionsToResponsesStream(
                     output: [],
                   },
                 }),
-                'response.created',
-              ),
-            ),
+                'response.created'
+              )
+            )
           );
           responseCreatedSent = true;
         }
@@ -1044,11 +1076,17 @@ function createCompletionsToResponsesStream(
                   JSON.stringify({
                     type: 'response.output_item.added',
                     output_index: outputItemIndex,
-                    item: { type: 'message', id: msgItemId, role: 'assistant', status: 'in_progress', content: [] },
+                    item: {
+                      type: 'message',
+                      id: msgItemId,
+                      role: 'assistant',
+                      status: 'in_progress',
+                      content: [],
+                    },
                   }),
-                  'response.output_item.added',
-                ),
-              ),
+                  'response.output_item.added'
+                )
+              )
             );
             controller.enqueue(
               encoder.encode(
@@ -1060,9 +1098,9 @@ function createCompletionsToResponsesStream(
                     content_index: 0,
                     part: { type: 'output_text', text: '', annotations: [] },
                   }),
-                  'response.content_part.added',
-                ),
-              ),
+                  'response.content_part.added'
+                )
+              )
             );
             contentPartAdded = true;
           }
@@ -1078,9 +1116,9 @@ function createCompletionsToResponsesStream(
                   content_index: 0,
                   delta: delta.content,
                 }),
-                'response.output_text.delta',
-              ),
-            ),
+                'response.output_text.delta'
+              )
+            )
           );
         }
 
@@ -1097,16 +1135,22 @@ function createCompletionsToResponsesStream(
                 // 关闭 text content
                 controller.enqueue(
                   encoder.encode(
-                    encodeSSE(JSON.stringify({ type: 'response.output_text.done', text: fullText }), 'response.output_text.done'),
-                  ),
+                    encodeSSE(
+                      JSON.stringify({ type: 'response.output_text.done', text: fullText }),
+                      'response.output_text.done'
+                    )
+                  )
                 );
                 controller.enqueue(
                   encoder.encode(
                     encodeSSE(
-                      JSON.stringify({ type: 'response.content_part.done', part: { type: 'output_text', text: fullText, annotations: [] } }),
-                      'response.content_part.done',
-                    ),
-                  ),
+                      JSON.stringify({
+                        type: 'response.content_part.done',
+                        part: { type: 'output_text', text: fullText, annotations: [] },
+                      }),
+                      'response.content_part.done'
+                    )
+                  )
                 );
                 outputItemIndex++;
                 contentPartAdded = false;
@@ -1127,9 +1171,9 @@ function createCompletionsToResponsesStream(
                         status: 'in_progress',
                       },
                     }),
-                    'response.output_item.added',
-                  ),
-                ),
+                    'response.output_item.added'
+                  )
+                )
               );
             }
 
@@ -1142,9 +1186,9 @@ function createCompletionsToResponsesStream(
                       output_index: outputItemIndex,
                       delta: fn.arguments,
                     }),
-                    'response.function_call_arguments.delta',
-                  ),
-                ),
+                    'response.function_call_arguments.delta'
+                  )
+                )
               );
             }
           }
@@ -1155,23 +1199,29 @@ function createCompletionsToResponsesStream(
           if (contentPartAdded) {
             controller.enqueue(
               encoder.encode(
-                encodeSSE(JSON.stringify({ type: 'response.output_text.done', text: fullText }), 'response.output_text.done'),
-              ),
+                encodeSSE(
+                  JSON.stringify({ type: 'response.output_text.done', text: fullText }),
+                  'response.output_text.done'
+                )
+              )
             );
             controller.enqueue(
               encoder.encode(
                 encodeSSE(
-                  JSON.stringify({ type: 'response.content_part.done', part: { type: 'output_text', text: fullText, annotations: [] } }),
-                  'response.content_part.done',
-                ),
-              ),
+                  JSON.stringify({
+                    type: 'response.content_part.done',
+                    part: { type: 'output_text', text: fullText, annotations: [] },
+                  }),
+                  'response.content_part.done'
+                )
+              )
             );
           }
         }
       }
     },
 
-    flush(controller) {
+    flush(_controller) {
       parser.flush();
     },
   });
@@ -1180,7 +1230,7 @@ function createCompletionsToResponsesStream(
 // ─── OpenAI Responses Stream → OpenAI Completions Stream ─────────────────────
 
 function createResponsesToCompletionsStream(
-  modelName: string,
+  modelName: string
 ): TransformStream<Uint8Array, Uint8Array> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -1219,10 +1269,16 @@ function createResponsesToCompletionsStream(
                       object: 'chat.completion.chunk',
                       created,
                       model: (resp.model as string) ?? modelName,
-                      choices: [{ index: 0, delta: { role: 'assistant', content: '' }, finish_reason: null }],
-                    }),
-                  ),
-                ),
+                      choices: [
+                        {
+                          index: 0,
+                          delta: { role: 'assistant', content: '' },
+                          finish_reason: null,
+                        },
+                      ],
+                    })
+                  )
+                )
               );
               firstChunkSent = true;
             }
@@ -1257,9 +1313,9 @@ function createResponsesToCompletionsStream(
                           finish_reason: null,
                         },
                       ],
-                    }),
-                  ),
-                ),
+                    })
+                  )
+                )
               );
             }
             break;
@@ -1277,9 +1333,9 @@ function createResponsesToCompletionsStream(
                       created,
                       model: modelName,
                       choices: [{ index: 0, delta: { content: delta }, finish_reason: null }],
-                    }),
-                  ),
-                ),
+                    })
+                  )
+                )
               );
             }
             break;
@@ -1305,9 +1361,9 @@ function createResponsesToCompletionsStream(
                           finish_reason: null,
                         },
                       ],
-                    }),
-                  ),
-                ),
+                    })
+                  )
+                )
               );
             }
             break;
@@ -1328,9 +1384,9 @@ function createResponsesToCompletionsStream(
                     created,
                     model: (resp.model as string) ?? modelName,
                     choices: [{ index: 0, delta: {}, finish_reason: finishReason }],
-                  }),
-                ),
-              ),
+                  })
+                )
+              )
             );
             controller.enqueue(encoder.encode('data: [DONE]\n\n'));
             break;
@@ -1342,7 +1398,7 @@ function createResponsesToCompletionsStream(
       }
     },
 
-    flush(controller) {
+    flush(_controller) {
       parser.flush();
     },
   });

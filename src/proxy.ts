@@ -1,6 +1,6 @@
 import { appendFile, readFile, unlink } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Context } from 'hono';
 import type { LogEvent, LogMeta } from './logger';
 import { extractProviderRequestId, getLogger, normalizeUrl } from './logger';
@@ -310,9 +310,7 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
       }
     })();
 
-    const outputBody = sseTransform
-      ? clientStream.pipeThrough(sseTransform)
-      : clientStream;
+    const outputBody = sseTransform ? clientStream.pipeThrough(sseTransform) : clientStream;
 
     return new Response(outputBody, {
       status: sseStatus,

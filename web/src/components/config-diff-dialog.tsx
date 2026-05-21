@@ -1,6 +1,7 @@
-import ReactDiffViewer from 'react-diff-viewer-continued';
 import { useTheme } from 'next-themes';
+import ReactDiffViewer from 'react-diff-viewer-continued';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -10,9 +11,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
 import { useConfigStore } from '@/stores/config-store';
-import { useDialogStore, type DiffMode } from '@/stores/dialog-store';
+import { type DiffMode, useDialogStore } from '@/stores/dialog-store';
 
 function getDialogTitle(mode: DiffMode): string {
   if (mode === 'save') return '确认保存配置';

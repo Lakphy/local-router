@@ -1,7 +1,7 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import JSON5 from 'json5';
 
 function runCli(args: string[]): { exitCode: number; stdout: string; stderr: string } {
@@ -115,7 +115,10 @@ describe('CLI config management', () => {
       expect(validate.exitCode).toBe(0);
 
       const finalConfig = JSON5.parse(readFileSync(configPath, 'utf-8')) as {
-        providers: Record<string, { models: Record<string, { 'image-input'?: boolean; reasoning?: boolean }> }>;
+        providers: Record<
+          string,
+          { models: Record<string, { 'image-input'?: boolean; reasoning?: boolean }> }
+        >;
         routes: Record<string, Record<string, { provider: string; model: string }>>;
       };
       expect(finalConfig.routes['openai-completions']['gpt-4o'].provider).toBe('p2');
@@ -161,7 +164,15 @@ describe('CLI config management', () => {
     );
 
     try {
-      const remove = runCli(['config', 'provider', 'remove', 'drop', '--force', '--config', configPath]);
+      const remove = runCli([
+        'config',
+        'provider',
+        'remove',
+        'drop',
+        '--force',
+        '--config',
+        configPath,
+      ]);
       expect(remove.exitCode).toBe(0);
       expect(remove.stdout).toContain('并清理 1 条关联路由');
 
