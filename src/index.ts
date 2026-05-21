@@ -15,9 +15,11 @@ import { validateConfigOrThrow } from './config-validate';
 import { CryptoSession } from './crypto';
 import { getLogMetrics, isLogMetricsWindow } from './log-metrics';
 import {
+  createLogEventSummaryFromEvent,
   exportLogEvents,
   getLogEventDetailById,
   isLogQueryWindow,
+  logEventMatchesQuery,
   parseBooleanFlag,
   parseCommaSeparated,
   queryLogEvents,
@@ -28,6 +30,7 @@ import {
 } from './log-query';
 import { queryLogSessions } from './log-sessions';
 import { getLogStorageInfo, startLogStorageBackgroundTask } from './log-storage';
+import { subscribeLogEvents } from './log-tail';
 import { initLogger, resetLogger } from './logger';
 import { createNetworkAccessMiddleware } from './network-access';
 import { openAPISpec } from './openapi';
@@ -698,7 +701,6 @@ function createAdminApiRoutes(
   });
 
   api.get('/logs/tail', async (c) => {
-    const config = store.get();
     const target = c.req.raw;
 
     const windowRaw = c.req.query('window') ?? '1h';
@@ -732,12 +734,16 @@ function createAdminApiRoutes(
 
     const encoder = new TextEncoder();
     let closed = false;
-    let lastSeenTs = Date.now() - 60 * 1000;
+    const maxPendingItems = 500;
 
     let closeStream: (() => void) | null = null;
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
-        let timer: ReturnType<typeof setInterval> | null = null;
+        let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+        let unsubscribe: (() => void) | null = null;
+        let flushQueued = false;
+        let droppedItems = 0;
+        const pending: ReturnType<typeof createLogEventSummaryFromEvent>[] = [];
 
         const push = (event: string, payload: unknown) => {
           if (closed) return;
@@ -748,10 +754,12 @@ function createAdminApiRoutes(
         const close = () => {
           if (closed) return;
           closed = true;
-          if (timer) {
-            clearInterval(timer);
-            timer = null;
+          if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+            heartbeatTimer = null;
           }
+          unsubscribe?.();
+          unsubscribe = null;
           target.signal.removeEventListener('abort', close);
           try {
             controller.close();
@@ -761,56 +769,104 @@ function createAdminApiRoutes(
         };
         closeStream = close;
 
-        push('ready', { ok: true, now: new Date().toISOString() });
+        const buildTailQuery = () => ({
+          ...resolveLogQueryRange({
+            window: windowRaw,
+            from: c.req.query('from'),
+            to: c.req.query('to'),
+          }),
+          levels,
+          providers: parseCommaSeparated(c.req.query('provider')),
+          routeTypes: parseCommaSeparated(c.req.query('routeType')),
+          models: parseCommaSeparated(c.req.query('model')),
+          modelIns: parseCommaSeparated(c.req.query('modelIn')),
+          modelOuts: parseCommaSeparated(c.req.query('modelOut')),
+          users: parseCommaSeparated(c.req.query('user')),
+          sessions: parseCommaSeparated(c.req.query('session')),
+          statusClasses,
+          hasError,
+          q: c.req.query('q') ?? '',
+          sort: sortRaw,
+          limit: 100,
+          cursor: null,
+        });
 
-        timer = setInterval(async () => {
+        const flush = () => {
+          flushQueued = false;
+          if (closed || pending.length === 0) return;
+
+          const items = pending.splice(0, pending.length);
+          const overflowMessage =
+            droppedItems > 0
+              ? `实时追踪队列已丢弃 ${droppedItems} 条事件，请重新查询以补齐。`
+              : undefined;
+          droppedItems = 0;
+
+          push('events', {
+            items,
+            nextCursor: null,
+            hasMore: false,
+            stats: {
+              total: 0,
+              errorCount: 0,
+              errorRate: 0,
+              avgLatencyMs: 0,
+              p95LatencyMs: 0,
+            },
+            meta: {
+              scannedFiles: 0,
+              scannedLines: 0,
+              parseErrors: 0,
+              truncated: false,
+              indexUsed: true,
+              indexFresh: true,
+              usesFts: false,
+              queryMs: 0,
+              rowsReturned: items.length,
+              fallbackReason: overflowMessage,
+              statsMode: 'none',
+            },
+          });
+        };
+
+        const queueFlush = () => {
+          if (flushQueued) return;
+          flushQueued = true;
+          queueMicrotask(flush);
+        };
+
+        unsubscribe = subscribeLogEvents((published) => {
           if (closed) return;
 
           try {
-            const toMs = Date.now();
-            const data = await queryLogEvents(
-              { logConfig: config.log },
-              {
-                fromMs: Math.max(lastSeenTs, toMs - 60 * 60 * 1000),
-                toMs,
-                levels,
-                providers: parseCommaSeparated(c.req.query('provider')),
-                routeTypes: parseCommaSeparated(c.req.query('routeType')),
-                models: parseCommaSeparated(c.req.query('model')),
-                modelIns: parseCommaSeparated(c.req.query('modelIn')),
-                modelOuts: parseCommaSeparated(c.req.query('modelOut')),
-                users: parseCommaSeparated(c.req.query('user')),
-                sessions: parseCommaSeparated(c.req.query('session')),
-                statusClasses,
-                hasError,
-                q: c.req.query('q') ?? '',
-                sort: sortRaw,
-                limit: 100,
-              }
-            );
+            const query = buildTailQuery();
+            if (!logEventMatchesQuery(published.event, query)) return;
 
-            if (closed) return;
-
-            if (data.items.length > 0) {
-              const maxTs = Math.max(
-                ...data.items.map((item) => Date.parse(item.ts)).filter(Number.isFinite)
-              );
-              if (Number.isFinite(maxTs)) {
-                lastSeenTs = Math.max(lastSeenTs, maxTs + 1);
-              }
-              push('events', {
-                items: data.items,
-                stats: data.stats,
-                meta: data.meta,
-              });
-            } else {
-              push('heartbeat', { ts: new Date().toISOString() });
+            if (pending.length >= maxPendingItems) {
+              pending.shift();
+              droppedItems += 1;
             }
+
+            pending.push(
+              createLogEventSummaryFromEvent(published.event, {
+                id: published.id,
+                date: published.date,
+                line: null,
+              })
+            );
+            queueFlush();
           } catch (err) {
-            if (closed) return;
             push('error', { error: err instanceof Error ? err.message : String(err) });
           }
-        }, 3000);
+        });
+
+        push('ready', { ok: true, now: new Date().toISOString() });
+
+        heartbeatTimer = setInterval(() => {
+          if (closed) return;
+          push('heartbeat', { ts: new Date().toISOString() });
+        }, 15000);
+        heartbeatTimer.unref?.();
 
         target.signal.addEventListener('abort', close);
       },

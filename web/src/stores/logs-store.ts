@@ -47,14 +47,15 @@ interface LogsState {
   tailEnabled: boolean;
   tailConnected: boolean;
   tailError: string | null;
+  refreshing: boolean;
 }
 
 interface LogsActions {
   setFilter: <K extends keyof LogFilters>(key: K, value: LogFilters[K]) => void;
-  setSort: (sort: LogsState['sort']) => void;
+  setSort: (sort: LogsState['sort']) => Promise<void>;
   applyFilters: () => Promise<void>;
   resetFilters: () => Promise<void>;
-  fetchFirstPage: () => Promise<void>;
+  fetchFirstPage: (options?: { silent?: boolean }) => Promise<void>;
   fetchNextPage: () => Promise<void>;
   setAutoRefreshEnabled: (enabled: boolean) => void;
   setRefreshIntervalSec: (seconds: number) => void;
@@ -88,6 +89,10 @@ const DEFAULT_FILTERS: LogFilters = {
 
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
 let tailCleanup: (() => void) | null = null;
+let firstPageController: AbortController | null = null;
+let firstPageRequestSeq = 0;
+
+const MAX_ITEMS_IN_MEMORY = 1_000;
 
 function buildRequestParams(state: LogsState, cursor?: string | null): FetchLogEventsParams {
   return {
@@ -112,12 +117,22 @@ function buildRequestParams(state: LogsState, cursor?: string | null): FetchLogE
 
 function mergeUniqueById(
   current: LogEventSummary[],
-  incoming: LogEventSummary[]
+  incoming: LogEventSummary[],
+  sort: LogsState['sort']
 ): LogEventSummary[] {
   const map = new Map<string, LogEventSummary>();
   for (const item of current) map.set(item.id, item);
   for (const item of incoming) map.set(item.id, item);
-  return Array.from(map.values()).sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts));
+  return Array.from(map.values())
+    .sort((a, b) => {
+      const diff = Date.parse(a.ts) - Date.parse(b.ts);
+      return sort === 'time_asc' ? diff : -diff;
+    })
+    .slice(0, MAX_ITEMS_IN_MEMORY);
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'AbortError';
 }
 
 export const useLogsStore = create<LogsStore>((set, get) => ({
@@ -137,6 +152,7 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
   tailEnabled: false,
   tailConnected: false,
   tailError: null,
+  refreshing: false,
 
   setFilter: (key, value) => {
     set((state) => ({
@@ -147,7 +163,11 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
     }));
   },
 
-  setSort: (sort) => set({ sort }),
+  setSort: async (sort) => {
+    if (get().sort === sort) return;
+    set({ sort });
+    await get().fetchFirstPage();
+  },
 
   applyFilters: async () => {
     await get().fetchFirstPage();
@@ -161,10 +181,22 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
     await get().fetchFirstPage();
   },
 
-  fetchFirstPage: async () => {
-    set({ loading: true, error: null });
+  fetchFirstPage: async (options = {}) => {
+    firstPageController?.abort();
+    const controller = new AbortController();
+    firstPageController = controller;
+    const requestSeq = ++firstPageRequestSeq;
+    const silent = options.silent === true && get().items.length > 0;
+
+    set({
+      loading: !silent,
+      refreshing: silent,
+      error: null,
+    });
+
     try {
-      const data = await fetchLogEvents(buildRequestParams(get()));
+      const data = await fetchLogEvents(buildRequestParams(get()), { signal: controller.signal });
+      if (requestSeq !== firstPageRequestSeq) return;
       set({
         items: data.items,
         nextCursor: data.nextCursor,
@@ -172,14 +204,25 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
         stats: data.stats,
         meta: data.meta,
         loading: false,
+        refreshing: false,
         loadingMore: false,
       });
+
+      if (get().tailEnabled) {
+        get().startTail();
+      }
     } catch (err) {
+      if (isAbortError(err) || requestSeq !== firstPageRequestSeq) return;
       set({
         loading: false,
+        refreshing: false,
         loadingMore: false,
         error: err instanceof Error ? err.message : '日志查询失败',
       });
+    } finally {
+      if (firstPageController === controller) {
+        firstPageController = null;
+      }
     }
   },
 
@@ -191,8 +234,9 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
 
     try {
       const data = await fetchLogEvents(buildRequestParams(state, state.nextCursor));
+      const latest = get();
       set({
-        items: [...state.items, ...data.items],
+        items: mergeUniqueById(latest.items, data.items, latest.sort),
         nextCursor: data.nextCursor,
         hasMore: data.hasMore,
         stats: data.stats,
@@ -229,7 +273,7 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
 
     const interval = Math.max(2, get().refreshIntervalSec) * 1000;
     autoRefreshTimer = setInterval(() => {
-      void get().fetchFirstPage();
+      void get().fetchFirstPage({ silent: true });
     }, interval);
   },
 
@@ -275,10 +319,10 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
         onEvents: (data) => {
           set((current) => ({
             tailConnected: true,
-            tailError: null,
-            items: mergeUniqueById(current.items, data.items),
-            stats: data.stats,
+            items: mergeUniqueById(current.items, data.items, current.sort),
+            stats: data.meta.statsMode === 'none' ? current.stats : data.stats,
             meta: data.meta,
+            tailError: data.meta.fallbackReason ?? null,
           }));
         },
         onError: (message) => {

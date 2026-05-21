@@ -7,6 +7,7 @@ export interface LogStorageInfo {
   totalBytes: number;
   eventsBytes: number;
   streamsBytes: number;
+  indexBytes: number;
   fileCount: number;
   lastUpdatedAt: string;
   isCalculating: boolean;
@@ -69,6 +70,7 @@ async function doCalculateStorage(logConfig?: LogConfig): Promise<LogStorageInfo
       totalBytes: 0,
       eventsBytes: 0,
       streamsBytes: 0,
+      indexBytes: 0,
       fileCount: 0,
       lastUpdatedAt: new Date().toISOString(),
       isCalculating: false,
@@ -81,15 +83,38 @@ async function doCalculateStorage(logConfig?: LogConfig): Promise<LogStorageInfo
     calculateDirSize(join(baseDir, 'events')),
     calculateDirSize(join(baseDir, 'streams')),
   ]);
+  const indexResult = await calculateIndexSize(baseDir);
 
   return {
-    totalBytes: eventsResult.bytes + streamsResult.bytes,
+    totalBytes: eventsResult.bytes + streamsResult.bytes + indexResult.bytes,
     eventsBytes: eventsResult.bytes,
     streamsBytes: streamsResult.bytes,
-    fileCount: eventsResult.fileCount + streamsResult.fileCount,
+    indexBytes: indexResult.bytes,
+    fileCount: eventsResult.fileCount + streamsResult.fileCount + indexResult.fileCount,
     lastUpdatedAt: new Date().toISOString(),
     isCalculating: false,
   };
+}
+
+async function calculateIndexSize(baseDir: string): Promise<{ bytes: number; fileCount: number }> {
+  if (!existsSync(baseDir)) {
+    return { bytes: 0, fileCount: 0 };
+  }
+
+  let bytes = 0;
+  let fileCount = 0;
+  try {
+    const entries = await fsPromises.readdir(baseDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.startsWith('logs-index.sqlite')) continue;
+      const stats = await fsPromises.stat(join(baseDir, entry.name));
+      bytes += stats.size;
+      fileCount += 1;
+    }
+  } catch {
+    return { bytes, fileCount };
+  }
+  return { bytes, fileCount };
 }
 
 export async function getLogStorageInfo(options: {

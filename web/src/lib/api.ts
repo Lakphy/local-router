@@ -140,6 +140,7 @@ export interface LogStorageInfo {
   totalBytes: number;
   eventsBytes: number;
   streamsBytes: number;
+  indexBytes: number;
   fileCount: number;
   lastUpdatedAt: string;
   isCalculating: boolean;
@@ -196,6 +197,13 @@ export interface LogEventsResponse {
     scannedLines: number;
     parseErrors: number;
     truncated: boolean;
+    indexUsed?: boolean;
+    indexFresh?: boolean;
+    usesFts?: boolean;
+    queryMs?: number;
+    rowsReturned?: number;
+    fallbackReason?: string;
+    statsMode?: 'none' | 'cached' | 'exact' | 'partial';
   };
 }
 
@@ -388,10 +396,13 @@ export async function fetchLogSessions(
 }
 
 export async function fetchLogEvents(
-  params: FetchLogEventsParams = {}
+  params: FetchLogEventsParams = {},
+  options: { signal?: AbortSignal } = {}
 ): Promise<LogEventsResponse> {
   const query = buildLogQueryString(params);
-  const res = await fetch(`/api/logs/events${query ? `?${query}` : ''}`);
+  const res = await fetch(`/api/logs/events${query ? `?${query}` : ''}`, {
+    signal: options.signal,
+  });
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

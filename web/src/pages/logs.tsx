@@ -60,6 +60,7 @@ export function LogsPage() {
   const meta = useLogsStore((s) => s.meta);
   const loading = useLogsStore((s) => s.loading);
   const loadingMore = useLogsStore((s) => s.loadingMore);
+  const refreshing = useLogsStore((s) => s.refreshing);
   const error = useLogsStore((s) => s.error);
   const autoRefreshEnabled = useLogsStore((s) => s.autoRefreshEnabled);
   const refreshIntervalSec = useLogsStore((s) => s.refreshIntervalSec);
@@ -117,6 +118,19 @@ export function LogsPage() {
       ),
     [items]
   );
+  const metaSummary = useMemo(() => {
+    if (!meta) return '等待查询';
+    if (meta.indexUsed) {
+      return `SQLite 索引 · 查询 ${meta.queryMs ?? 0} ms · 返回 ${
+        meta.rowsReturned ?? items.length
+      } · 索引刷新 ${meta.scannedLines} 行${
+        meta.fallbackReason ? ` · ${meta.fallbackReason}` : ''
+      }`;
+    }
+    return `JSONL 回退 · 文件 ${meta.scannedFiles} · 行 ${meta.scannedLines} · 解析异常 ${
+      meta.parseErrors
+    }${meta.truncated ? ' · 已截断' : ''}${meta.fallbackReason ? ` · ${meta.fallbackReason}` : ''}`;
+  }, [items.length, meta]);
 
   async function handleExport(format: 'csv' | 'json') {
     try {
@@ -383,17 +397,19 @@ export function LogsPage() {
         <StatBox title="错误率" value={`${stats?.errorRate ?? 0}%`} />
         <StatBox title="P95" value={`${stats?.p95LatencyMs ?? 0} ms`} />
         <StatBox title="平均延迟" value={`${stats?.avgLatencyMs ?? 0} ms`} />
-        <StatBox title="扫描行数" value={meta?.scannedLines ?? 0} />
+        <StatBox
+          title={meta?.indexUsed ? '索引刷新行' : '扫描行数'}
+          value={meta?.scannedLines ?? 0}
+        />
       </div>
 
       <div className="rounded-lg border bg-background">
         <div className="border-b px-3 py-3">
-          <h3 className="text-base font-semibold">结果列表</h3>
-          <p className="text-sm text-muted-foreground">
-            {meta
-              ? `文件 ${meta.scannedFiles} · 行 ${meta.scannedLines} · 解析异常 ${meta.parseErrors}${meta.truncated ? ' · 已截断' : ''}`
-              : '等待查询'}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold">结果列表</h3>
+            {refreshing ? <Badge variant="secondary">刷新中</Badge> : null}
+          </div>
+          <p className="text-sm text-muted-foreground">{metaSummary}</p>
         </div>
         <div className="space-y-3 px-3 py-3">
           {error ? (
@@ -403,7 +419,7 @@ export function LogsPage() {
                 <EmptyDescription>{error}</EmptyDescription>
               </EmptyHeader>
             </Empty>
-          ) : loading ? (
+          ) : loading && items.length === 0 ? (
             <div className="space-y-2">
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-full" />
@@ -421,7 +437,7 @@ export function LogsPage() {
               <LogsDataTable
                 data={items}
                 sort={sort}
-                onSortChange={setSort}
+                onSortChange={(next) => void setSort(next)}
                 onRowClick={(item) => void navigate({ to: '/logs/$id', params: { id: item.id } })}
               />
 

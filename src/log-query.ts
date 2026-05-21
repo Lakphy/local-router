@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { LogConfig, ProviderType } from './config';
 import { resolveLogBaseDir } from './config';
+import { getIndexedLogEventDetail, queryIndexedLogEvents } from './log-index';
 import { resolveLogSessionIdentity } from './log-session-identity';
 import type { LogEvent } from './logger';
 
@@ -69,6 +70,13 @@ export interface LogQueryMeta {
   scannedLines: number;
   parseErrors: number;
   truncated: boolean;
+  indexUsed?: boolean;
+  indexFresh?: boolean;
+  usesFts?: boolean;
+  queryMs?: number;
+  rowsReturned?: number;
+  fallbackReason?: string;
+  statsMode?: 'none' | 'cached' | 'exact' | 'partial';
 }
 
 export interface LogQueryResult {
@@ -207,6 +215,15 @@ function decodeCursor(raw: string): CursorData {
     throw new Error('cursor 非法');
   }
   return parsed;
+}
+
+function isLegacyOffsetCursor(raw: string): boolean {
+  try {
+    const parsed = JSON.parse(decodeBase64Url(raw)) as { offset?: unknown };
+    return Number.isInteger(parsed.offset) && Number(parsed.offset) >= 0;
+  } catch {
+    return false;
+  }
 }
 
 function encodeEventId(date: string, line: number): string {
@@ -380,16 +397,19 @@ function insertBoundedEvent(
   }
 }
 
-function clampLimit(limit?: number): number {
+function clampLimit(limit?: number, maxLimit = MAX_QUERY_LIMIT): number {
   if (!Number.isFinite(limit)) return DEFAULT_QUERY_LIMIT;
   const integer = Math.floor(limit as number);
   if (integer <= 0) return DEFAULT_QUERY_LIMIT;
-  return Math.min(MAX_QUERY_LIMIT, integer);
+  return Math.min(maxLimit, integer);
 }
 
-function normalizeQuery(input: NormalizedLogQueryInput): LogQueryParams {
+function normalizeQuery(
+  input: NormalizedLogQueryInput,
+  maxLimit = MAX_QUERY_LIMIT
+): LogQueryParams {
   const sort = input.sort ?? 'time_desc';
-  const limit = clampLimit(input.limit);
+  const limit = clampLimit(input.limit, maxLimit);
   const qRaw = (input.q ?? '').trim();
   const q = qRaw.length > MAX_Q_LENGTH ? qRaw.slice(0, MAX_Q_LENGTH) : qRaw;
 
@@ -438,6 +458,57 @@ function eventToSummary(item: LocatedLogEvent): LogEventSummary {
     userKey: identity.userKey,
     sessionId: identity.sessionId,
   };
+}
+
+export function createLogEventSummaryFromEvent(
+  event: LogEvent,
+  location: { id: string; date: string; line?: number | null }
+): LogEventSummary {
+  const ts = Date.parse(event.ts_start);
+  return eventToSummary({
+    id: location.id,
+    date: location.date,
+    line: location.line ?? 0,
+    ts: Number.isFinite(ts) ? ts : 0,
+    level: getLevel(event),
+    statusClass: getStatusClass(event),
+    event,
+  });
+}
+
+export function logEventMatchesQuery(event: LogEvent, query: LogQueryParams): boolean {
+  if (!event.ts_start) return false;
+  const ts = Date.parse(event.ts_start);
+  if (!Number.isFinite(ts) || ts < query.fromMs || ts > query.toMs) return false;
+
+  const level = getLevel(event);
+  const statusClass = getStatusClass(event);
+
+  if (query.levels.length > 0 && !query.levels.includes(level)) return false;
+  if (query.providers.length > 0 && !query.providers.includes(event.provider)) return false;
+  if (query.routeTypes.length > 0 && !query.routeTypes.includes(event.route_type)) return false;
+
+  const eventModel = event.model_out || event.model_in;
+  if (query.models.length > 0 && !query.models.includes(eventModel)) return false;
+  if (query.modelIns.length > 0 && !query.modelIns.includes(event.model_in)) return false;
+  if (query.modelOuts.length > 0 && !query.modelOuts.includes(event.model_out)) return false;
+
+  const identity = resolveLogSessionIdentity(event.request_body);
+  if (query.users.length > 0) {
+    const matchedByRaw = identity.userIdRaw ? query.users.includes(identity.userIdRaw) : false;
+    const matchedByUserKey = identity.userKey ? query.users.includes(identity.userKey) : false;
+    if (!matchedByRaw && !matchedByUserKey) return false;
+  }
+
+  if (query.sessions.length > 0) {
+    if (!identity.sessionId || !query.sessions.includes(identity.sessionId)) return false;
+  }
+
+  if (query.statusClasses.length > 0 && !query.statusClasses.includes(statusClass)) return false;
+
+  const hasError = level === 'error';
+  if (query.hasError !== null && query.hasError !== hasError) return false;
+  return containsKeyword(event, query.q);
 }
 
 function detectBodyPolicy(event: LogEvent): 'off' | 'masked' | 'full' | 'unknown' {
@@ -810,6 +881,14 @@ export async function queryLogEvents(
   context: LogQueryContext,
   input: NormalizedLogQueryInput
 ): Promise<LogQueryResult> {
+  return queryLogEventsInternal(context, input, MAX_QUERY_LIMIT);
+}
+
+async function queryLogEventsInternal(
+  context: LogQueryContext,
+  input: NormalizedLogQueryInput,
+  maxLimit: number
+): Promise<LogQueryResult> {
   const logEnabled = !!context.logConfig && context.logConfig.enabled !== false;
   if (!logEnabled) {
     return {
@@ -833,9 +912,22 @@ export async function queryLogEvents(
   }
 
   const baseDir = resolveLogBaseDir(context.logConfig);
-  const query = normalizeQuery(input);
-  const offset = query.cursor ? decodeCursor(query.cursor).offset : 0;
+  const query = normalizeQuery(input, maxLimit);
 
+  const indexed = await queryIndexedLogEvents(context.logConfig, query);
+  if (indexed?.meta.indexUsed) {
+    return indexed;
+  }
+
+  if (query.cursor && !isLegacyOffsetCursor(query.cursor)) {
+    throw new Error(
+      `索引查询失败，无法使用索引 cursor 回退到 JSONL，请重新查询第一页${
+        indexed?.meta.fallbackReason ? `: ${indexed.meta.fallbackReason}` : ''
+      }`
+    );
+  }
+
+  const offset = query.cursor ? decodeCursor(query.cursor).offset : 0;
   const scanned = await scanEvents(baseDir, query);
 
   const pageItems = scanned.items.slice(offset, offset + query.limit);
@@ -847,7 +939,13 @@ export async function queryLogEvents(
     nextCursor: hasMore ? encodeCursor({ offset: nextOffset }) : null,
     hasMore,
     stats: scanned.stats,
-    meta: scanned.meta,
+    meta: {
+      ...scanned.meta,
+      indexUsed: false,
+      indexFresh: false,
+      fallbackReason: indexed?.meta.fallbackReason,
+      statsMode: 'exact',
+    },
   };
 }
 
@@ -857,6 +955,20 @@ export async function getLogEventDetailById(
 ): Promise<LogEventDetail | null> {
   const logEnabled = !!context.logConfig && context.logConfig.enabled !== false;
   if (!logEnabled) return null;
+
+  const indexed = getIndexedLogEventDetail(context.logConfig, id);
+  if (indexed) {
+    return buildLogEventDetail(
+      id,
+      indexed.event,
+      {
+        date: indexed.location.date,
+        line: indexed.location.line ?? 0,
+        file: indexed.location.file,
+      },
+      context
+    );
+  }
 
   const { date, line } = decodeEventId(id);
   const baseDir = resolveLogBaseDir(context.logConfig);
@@ -997,11 +1109,15 @@ export async function exportLogEvents(
   exported: number;
   total: number;
 }> {
-  const data = await queryLogEvents(context, {
-    ...input,
-    cursor: null,
-    limit: MAX_EXPORT_ROWS,
-  });
+  const data = await queryLogEventsInternal(
+    context,
+    {
+      ...input,
+      cursor: null,
+      limit: MAX_EXPORT_ROWS,
+    },
+    MAX_EXPORT_ROWS
+  );
 
   const now = new Date().toISOString().replace(/[:.]/g, '-');
   if (format === 'csv') {

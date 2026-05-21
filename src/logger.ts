@@ -1,6 +1,13 @@
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LogConfig } from './config';
+import {
+  disposeLogIndex,
+  encodeOffsetLogEventId,
+  enqueueLogEventForIndex,
+  initLogIndex,
+} from './log-index';
+import { publishLogEvent } from './log-tail';
 import type { PluginPhaseLog } from './plugin';
 
 export interface LogEvent {
@@ -107,7 +114,19 @@ class Logger {
       this.ensureDirs();
       const dateStr = event.ts_start.slice(0, 10);
       const filePath = join(this.eventsDir, `${dateStr}.jsonl`);
-      appendFileSync(filePath, `${JSON.stringify(event)}\n`);
+      const offset = existsSync(filePath) ? statSync(filePath).size : 0;
+      const line = `${JSON.stringify(event)}\n`;
+      appendFileSync(filePath, line);
+      const id = encodeOffsetLogEventId(dateStr, offset);
+      enqueueLogEventForIndex({
+        baseDir: this.baseDir,
+        filePath,
+        date: dateStr,
+        offset,
+        byteLength: Buffer.byteLength(line),
+        event,
+      });
+      publishLogEvent({ id, date: dateStr, filePath, offset, event });
     } catch (err) {
       console.error('[logger] 事件日志写入失败:', err);
     }
@@ -135,6 +154,7 @@ let instance: Logger | null = null;
 
 export function initLogger(baseDir: string, config: LogConfig): void {
   instance = new Logger(baseDir, config);
+  initLogIndex(baseDir, config);
   if (instance.enabled) {
     console.log(`[logger] 日志系统已初始化: ${baseDir}`);
   }
@@ -146,6 +166,7 @@ export function getLogger(): Logger | null {
 
 export function resetLogger(): void {
   instance = null;
+  disposeLogIndex();
 }
 
 export function collectHeaders(headers: Headers): Record<string, string> {
