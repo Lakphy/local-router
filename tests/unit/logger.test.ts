@@ -304,20 +304,31 @@ describe('logger', () => {
     });
   });
 
-  describe('writeStreamFile', () => {
-    test('应写入流式响应到文件', () => {
+  describe('openStreamCapture', () => {
+    const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
+
+    test('应顺序写入 chunk 到正式日志路径，单次落盘无临时文件', () => {
       const config: LogConfig = { streams: { enabled: true } };
       initLogger(tempDir, config);
       const logger = getLogger()!;
 
-      const content = 'data: {"choices": [{"delta": {"content": "hello"}}]}\n\ndata: [DONE]\n';
-      const filePath = logger.writeStreamFile('req-123', '2025-03-01', content);
+      const handle = logger.openStreamCapture('req-123', '2025-03-01');
+      handle.write(enc('data: {"choices": [{"delta": {"content": "hello"}}]}\n\n'));
+      handle.write(enc('data: [DONE]\n'));
+      const result = handle.finalize();
 
-      expect(filePath).not.toBeNull();
-      expect(existsSync(filePath!)).toBe(true);
+      expect(result.filePath).not.toBeNull();
+      expect(existsSync(result.filePath!)).toBe(true);
+      expect(result.bytesWritten).toBeGreaterThan(0);
+      expect(result.truncated).toBe(false);
 
-      const savedContent = readFileSync(filePath!, 'utf-8');
-      expect(savedContent).toBe(content);
+      const saved = readFileSync(result.filePath!, 'utf-8');
+      expect(saved).toBe('data: {"choices": [{"delta": {"content": "hello"}}]}\n\ndata: [DONE]\n');
+      expect(Buffer.byteLength(saved, 'utf-8')).toBe(result.bytesWritten);
+
+      // 不应残留 /tmp 临时文件 —— 新方案直接写到目标路径。
+      const expectedPath = join(tempDir, 'streams', '2025-03-01', 'req-123.sse.raw');
+      expect(result.filePath).toBe(expectedPath);
     });
 
     test('应按日期组织流式文件', () => {
@@ -325,8 +336,13 @@ describe('logger', () => {
       initLogger(tempDir, config);
       const logger = getLogger()!;
 
-      logger.writeStreamFile('req-1', '2025-03-01', 'content-1');
-      logger.writeStreamFile('req-2', '2025-03-02', 'content-2');
+      const h1 = logger.openStreamCapture('req-1', '2025-03-01');
+      h1.write(enc('content-1'));
+      h1.finalize();
+
+      const h2 = logger.openStreamCapture('req-2', '2025-03-02');
+      h2.write(enc('content-2'));
+      h2.finalize();
 
       const dir1 = join(tempDir, 'streams', '2025-03-01');
       const dir2 = join(tempDir, 'streams', '2025-03-02');
@@ -335,9 +351,11 @@ describe('logger', () => {
       expect(existsSync(dir2)).toBe(true);
       expect(existsSync(join(dir1, 'req-1.sse.raw'))).toBe(true);
       expect(existsSync(join(dir2, 'req-2.sse.raw'))).toBe(true);
+      expect(readFileSync(join(dir1, 'req-1.sse.raw'), 'utf-8')).toBe('content-1');
+      expect(readFileSync(join(dir2, 'req-2.sse.raw'), 'utf-8')).toBe('content-2');
     });
 
-    test('应支持 maxBytesPerRequest 截断', () => {
+    test('单 chunk 超出 maxBytesPerRequest 时应截断并写入 [TRUNCATED] 标记', () => {
       const maxBytes = 20;
       const config: LogConfig = {
         streams: { enabled: true, maxBytesPerRequest: maxBytes },
@@ -345,32 +363,96 @@ describe('logger', () => {
       initLogger(tempDir, config);
       const logger = getLogger()!;
 
-      const longContent = 'a'.repeat(100);
-      const filePath = logger.writeStreamFile('req-123', '2025-03-01', longContent);
+      const handle = logger.openStreamCapture('req-trunc-1', '2025-03-01');
+      handle.write(enc('a'.repeat(100)));
+      const result = handle.finalize();
 
-      const savedContent = readFileSync(filePath!, 'utf-8');
-      expect(savedContent.endsWith('\n[TRUNCATED]')).toBe(true);
-      expect(savedContent.length).toBeLessThanOrEqual(maxBytes + '\n[TRUNCATED]'.length + 1);
+      const saved = readFileSync(result.filePath!, 'utf-8');
+      expect(saved.startsWith('a'.repeat(20))).toBe(true);
+      expect(saved.endsWith('\n[TRUNCATED]')).toBe(true);
+      expect(result.truncated).toBe(true);
+      // bytesWritten 仅计原始 chunk（不含截断标记自身长度）。
+      expect(result.bytesWritten).toBe(maxBytes);
     });
 
-    test('禁用时返回 null 且不写入文件', () => {
+    test('累计跨多个 chunk 超过 maxBytesPerRequest 时应在到达上限时立即截断', () => {
+      const maxBytes = 8;
+      const config: LogConfig = {
+        streams: { enabled: true, maxBytesPerRequest: maxBytes },
+      };
+      initLogger(tempDir, config);
+      const logger = getLogger()!;
+
+      const handle = logger.openStreamCapture('req-trunc-2', '2025-03-01');
+      handle.write(enc('aaaa')); // 4 bytes
+      handle.write(enc('bbbb')); // 累计 8 bytes，恰好达上限
+      handle.write(enc('cccc')); // 应被截断；写入截断标记后停止
+      handle.write(enc('dddd')); // 截断后再 write 应是 noop
+      const result = handle.finalize();
+
+      const saved = readFileSync(result.filePath!, 'utf-8');
+      expect(saved.startsWith('aaaabbbb')).toBe(true);
+      expect(saved.endsWith('\n[TRUNCATED]')).toBe(true);
+      expect(saved.includes('cccc')).toBe(false);
+      expect(saved.includes('dddd')).toBe(false);
+      expect(result.truncated).toBe(true);
+      expect(result.bytesWritten).toBe(maxBytes);
+    });
+
+    test('finalize() 应是幂等的', () => {
+      const config: LogConfig = { streams: { enabled: true } };
+      initLogger(tempDir, config);
+      const logger = getLogger()!;
+
+      const handle = logger.openStreamCapture('req-idem', '2025-03-01');
+      handle.write(enc('payload'));
+      const r1 = handle.finalize();
+      const r2 = handle.finalize();
+
+      expect(r1).toEqual(r2);
+      expect(existsSync(r1.filePath!)).toBe(true);
+    });
+
+    test('finalize() 之后再 write() 不应抛错也不应再写盘', () => {
+      const config: LogConfig = { streams: { enabled: true } };
+      initLogger(tempDir, config);
+      const logger = getLogger()!;
+
+      const handle = logger.openStreamCapture('req-after-final', '2025-03-01');
+      handle.write(enc('first'));
+      const finalized = handle.finalize();
+
+      expect(() => handle.write(enc('after-final'))).not.toThrow();
+      const saved = readFileSync(finalized.filePath!, 'utf-8');
+      expect(saved).toBe('first');
+    });
+
+    test('禁用日志时返回 noop handle（filePath=null，不写盘）', () => {
       const config: LogConfig = { enabled: false };
       initLogger(tempDir, config);
       const logger = getLogger()!;
 
-      const filePath = logger.writeStreamFile('req-123', '2025-03-01', 'content');
+      const handle = logger.openStreamCapture('req-noop-1', '2025-03-01');
+      handle.write(enc('content'));
+      const result = handle.finalize();
 
-      expect(filePath).toBeNull();
+      expect(result.filePath).toBeNull();
+      expect(result.bytesWritten).toBe(0);
+      expect(result.truncated).toBe(false);
+      expect(handle.filePath).toBeNull();
     });
 
-    test('streams.enabled=false 时应返回 null', () => {
+    test('streams.enabled=false 时返回 noop handle', () => {
       const config: LogConfig = { streams: { enabled: false } };
       initLogger(tempDir, config);
       const logger = getLogger()!;
 
-      const filePath = logger.writeStreamFile('req-123', '2025-03-01', 'content');
+      const handle = logger.openStreamCapture('req-noop-2', '2025-03-01');
+      handle.write(enc('content'));
+      const result = handle.finalize();
 
-      expect(filePath).toBeNull();
+      expect(result.filePath).toBeNull();
+      expect(result.bytesWritten).toBe(0);
     });
   });
 

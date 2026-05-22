@@ -65,8 +65,18 @@ export function createModelRoutingHandler(options: ModelRoutingOptions) {
     }
 
     payload.model = target.model;
-    const body = JSON.stringify(payload);
     const targetUrl = buildTargetUrl(provider.base);
+
+    // requestBytes 表达"客户端发来的请求字节数"。优先用客户端 content-length 头，
+    // 避免再次序列化 payload；缺失或非法（非整数 / 负数）时回退到一次 stringify 测量。
+    // 注意：因为路由层会改写 payload.model，fallback 测得的字节数可能与原始客户端
+    // 字节数有几字节差异（model 名长度差），但仍能准确反映"日志事件发生时的请求体大小"。
+    const contentLengthHeader = c.req.header('content-length');
+    const parsedContentLength = contentLengthHeader ? Number(contentLengthHeader) : NaN;
+    const requestBytes =
+      Number.isInteger(parsedContentLength) && parsedContentLength >= 0
+        ? parsedContentLength
+        : Buffer.byteLength(JSON.stringify(payload), 'utf-8');
 
     const logMeta: LogMeta = {
       requestId: crypto.randomUUID(),
@@ -81,7 +91,7 @@ export function createModelRoutingHandler(options: ModelRoutingOptions) {
       path: c.req.path,
       contentTypeReq: c.req.header('content-type') ?? null,
       userAgent: c.req.header('user-agent') ?? null,
-      requestBytes: Buffer.byteLength(body, 'utf-8'),
+      requestBytes,
       requestHeaders: collectHeaders(c.req.raw.headers),
     };
 
@@ -93,7 +103,7 @@ export function createModelRoutingHandler(options: ModelRoutingOptions) {
       apiKey: provider.apiKey,
       proxy: provider.proxy,
       authType,
-      body,
+      body: payload,
       logMeta,
       plugins: plugins.length > 0 ? plugins : undefined,
       pluginConfigs:

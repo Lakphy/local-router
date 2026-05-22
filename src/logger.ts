@@ -1,4 +1,12 @@
-import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  statSync,
+  writeSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import type { LogConfig } from './config';
 import {
@@ -40,6 +48,10 @@ export interface LogEvent {
   request_body?: unknown;
   response_body?: string;
   stream_file?: string;
+  /** 流式日志实际落盘字节数；省略时表示未落盘或全部以 stream_bytes 字段表达。 */
+  stream_file_bytes?: number;
+  /** 流式日志因 maxBytesPerRequest 上限被截断时为 true。 */
+  stream_file_truncated?: boolean;
   // 插件相关日志字段
   plugins_request?: PluginPhaseLog[];
   request_body_after_plugins?: unknown;
@@ -47,6 +59,21 @@ export interface LogEvent {
   plugins_response?: PluginPhaseLog[];
   response_body_before_plugins?: string;
   response_body_after_plugins?: string;
+}
+
+/**
+ * 流式日志旁路落盘句柄。
+ *
+ * 由 Logger.openStreamCapture 创建，调用方在每个 chunk 上调用 write()，
+ * 流结束（或异常关闭）时调用 finalize() 一次。两者都是幂等的。
+ */
+export interface StreamCaptureHandle {
+  /** 实际落盘文件路径；当流日志被禁用时为 null。 */
+  filePath: string | null;
+  /** 同步追加一段字节到流日志文件；超过 maxBytesPerRequest 后自动写入 [TRUNCATED] 标记并停止落盘。 */
+  write(chunk: Uint8Array): void;
+  /** 关闭文件、返回累计落盘字节数与截断状态。允许多次调用（幂等）。 */
+  finalize(): { bytesWritten: number; truncated: boolean; filePath: string | null };
 }
 
 export interface LogMeta {
@@ -132,22 +159,85 @@ class Logger {
     }
   }
 
-  writeStreamFile(requestId: string, dateStr: string, content: string): string | null {
-    if (!this._enabled || !this._streamsEnabled) return null;
+  /**
+   * 打开一个流式日志旁路落盘句柄。
+   *
+   * 返回的 handle 在每次 chunk 到达时被同步追加到正式日志路径，避免临时文件 +
+   * 全量回读的内存放大。当 logger 或 streams 被禁用时返回一个 noop handle。
+   */
+  openStreamCapture(requestId: string, dateStr: string): StreamCaptureHandle {
+    if (!this._enabled || !this._streamsEnabled) {
+      return makeNoopStreamCaptureHandle();
+    }
+
+    const maxStreamBytes = this.maxStreamBytes;
+    const truncationMarker = Buffer.from('\n[TRUNCATED]');
+
+    let filePath: string | null;
+    let fd: number | null;
     try {
       const dir = this.ensureStreamDateDir(dateStr);
-      const filePath = join(dir, `${requestId}.sse.raw`);
-      const toWrite =
-        content.length > this.maxStreamBytes
-          ? `${content.slice(0, this.maxStreamBytes)}\n[TRUNCATED]`
-          : content;
-      writeFileSync(filePath, toWrite);
-      return filePath;
+      filePath = join(dir, `${requestId}.sse.raw`);
+      fd = openSync(filePath, 'a');
     } catch (err) {
-      console.error('[logger] 流式日志写入失败:', err);
-      return null;
+      console.error('[logger] 流式日志打开失败:', err);
+      return makeNoopStreamCaptureHandle();
     }
+
+    let bytes = 0;
+    let truncated = false;
+    let finalized = false;
+
+    return {
+      filePath,
+      write(chunk: Uint8Array): void {
+        if (finalized || truncated || fd == null) return;
+        try {
+          if (bytes + chunk.byteLength > maxStreamBytes) {
+            const remaining = Math.max(0, maxStreamBytes - bytes);
+            if (remaining > 0) {
+              writeSync(fd, chunk.subarray(0, remaining));
+              bytes += remaining;
+            }
+            writeSync(fd, truncationMarker);
+            truncated = true;
+            return;
+          }
+          writeSync(fd, chunk);
+          bytes += chunk.byteLength;
+        } catch (err) {
+          console.error('[logger] 流式日志写入失败:', err);
+          // 单 chunk 写入失败不应中断整个流；将状态置为已截断，避免后续 chunk 继续重试。
+          truncated = true;
+        }
+      },
+      finalize() {
+        if (finalized) return { bytesWritten: bytes, truncated, filePath };
+        finalized = true;
+        if (fd != null) {
+          try {
+            closeSync(fd);
+          } catch {
+            // 重复关闭或已被外部关闭时静默忽略。
+          }
+          fd = null;
+        }
+        return { bytesWritten: bytes, truncated, filePath };
+      },
+    };
   }
+}
+
+function makeNoopStreamCaptureHandle(): StreamCaptureHandle {
+  return {
+    filePath: null,
+    write(): void {
+      // no-op
+    },
+    finalize(): { bytesWritten: number; truncated: boolean; filePath: string | null } {
+      return { bytesWritten: 0, truncated: false, filePath: null };
+    },
+  };
 }
 
 let instance: Logger | null = null;

@@ -1,6 +1,3 @@
-import { appendFile, readFile, unlink } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { Context } from 'hono';
 import type { LogEvent, LogMeta } from './logger';
 import { extractProviderRequestId, getLogger, normalizeUrl } from './logger';
@@ -72,7 +69,11 @@ export interface ProxyRequestOptions {
   apiKey: string;
   proxy?: string;
   authType: AuthType;
-  body: string;
+  /**
+   * 请求体对象。代理路径上以对象形式贯通：仅在调用上游 fetch 之前序列化一次，
+   * 避免路由 → 插件 → 日志链路上重复 JSON.parse / JSON.stringify。
+   */
+  body: Record<string, unknown>;
   logMeta: LogMeta;
   plugins?: Plugin[];
   pluginConfigs?: PluginPhaseLog[];
@@ -116,38 +117,12 @@ function buildLogEvent(
   };
 }
 
-function createTempStreamCapturePath(requestId: string): string {
-  return join(tmpdir(), `local-router-stream-${requestId}-${Date.now()}.sse.raw`);
-}
-
-async function appendTempStreamCapture(filePath: string, chunk: Uint8Array): Promise<void> {
-  await appendFile(filePath, chunk);
-}
-
-async function flushTempCaptureToLogger(
-  tempPath: string,
-  requestId: string,
-  dateStr: string,
-  logger: ReturnType<typeof getLogger>
-): Promise<string | null> {
-  if (!logger) return null;
-  try {
-    const text = await readFile(tempPath, 'utf-8').catch((err) => {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return '';
-      throw err;
-    });
-    return logger.writeStreamFile(requestId, dateStr, text);
-  } finally {
-    await unlink(tempPath).catch(() => undefined);
-  }
-}
-
 /**
  * 通用代理职责：
  * 1) 注入上游认证头
  * 2) 执行请求转发
  * 3) 原样透传上游响应（含流式）
- * 4) 记录请求/响应日志（流式使用 tee 分流）
+ * 4) 记录请求/响应日志（流式使用 ReadableStream tap 旁路落盘）
  */
 export async function proxyRequest(c: Context, options: ProxyRequestOptions): Promise<Response> {
   const { logMeta, plugins, pluginConfigs } = options;
@@ -157,22 +132,32 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
 
   let targetUrl = options.targetUrl;
   let headers = buildUpstreamHeaders(c.req.raw.headers, options.apiKey, options.authType);
-  let bodyStr = options.body;
+  // 整条代理路径以对象形式承载 payload，仅在 fetch 调用前一次性序列化。
+  let currentBody: Record<string, unknown> = options.body;
+
+  // 插件上下文一次构造、多处复用；冻结防止插件意外 mutate 共享上下文。
+  const pluginCtx: PluginContext = Object.freeze({
+    requestId: logMeta.requestId,
+    provider: logMeta.provider,
+    modelIn: logMeta.modelIn,
+    modelOut: logMeta.modelOut,
+    routeType: logMeta.routeType,
+    isStream: logMeta.isStream,
+  });
+
+  // 在调用插件之前对客户端原始请求体做一次"日志快照"：
+  // 仅当真的要写完整 body 日志（bodyPolicy != off）时才付一次 stringify+parse 代价。
+  // 这样即使插件直接 mutate 入参对象，日志中的 request_body 仍保留客户端原始视图，
+  // 与历史 `JSON.parse(options.body)` 路径的语义对齐。
+  const wantsBodyLog = shouldLog && logger?.bodyPolicy !== 'off';
+  const requestBodySnapshot: unknown = wantsBodyLog
+    ? (JSON.parse(JSON.stringify(options.body)) as unknown)
+    : undefined;
 
   // 插件请求阶段
   const pluginLogOverrides: Partial<LogEvent> = {};
   if (hasPlugins) {
-    const bodyObj = JSON.parse(bodyStr) as Record<string, unknown>;
-    const ctx: PluginContext = {
-      requestId: logMeta.requestId,
-      provider: logMeta.provider,
-      modelIn: logMeta.modelIn,
-      modelOut: logMeta.modelOut,
-      routeType: logMeta.routeType,
-      isStream: logMeta.isStream,
-    };
-
-    const result = await executeRequestPlugins(plugins, ctx, targetUrl, headers, bodyObj);
+    const result = await executeRequestPlugins(plugins, pluginCtx, targetUrl, headers, currentBody);
 
     // 记录插件修改
     if (pluginConfigs) {
@@ -183,15 +168,17 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
       pluginLogOverrides.request_url_after_plugins = targetUrl;
     }
     headers = result.headers;
-    const newBodyStr = JSON.stringify(result.body);
-    if (newBodyStr !== bodyStr) {
-      bodyStr = newBodyStr;
+    if (result.body !== currentBody) {
+      currentBody = result.body;
       pluginLogOverrides.request_body_after_plugins = result.body;
     }
   }
 
-  const requestBody =
-    shouldLog && logger?.bodyPolicy !== 'off' ? JSON.parse(options.body) : undefined;
+  // 请求体序列化只发生在这里，进入网络一次。
+  const wireBody = JSON.stringify(currentBody);
+
+  // 用预先准备好的快照作为日志中的 request_body，避免插件 mutate 入参后污染日志。
+  const requestBody = requestBodySnapshot;
 
   const proxy = options.proxy?.trim() ? options.proxy.trim() : undefined;
 
@@ -200,7 +187,7 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
     upstreamRes = await fetch(targetUrl, {
       method: c.req.method,
       headers,
-      body: bodyStr,
+      body: wireBody,
       ...(proxy ? { proxy } : {}),
       decompress: true,
     });
@@ -239,17 +226,9 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
     let sseTransform: TransformStream<Uint8Array, Uint8Array> | null = null;
 
     if (hasPlugins) {
-      const ctx: PluginContext = {
-        requestId: logMeta.requestId,
-        provider: logMeta.provider,
-        modelIn: logMeta.modelIn,
-        modelOut: logMeta.modelOut,
-        routeType: logMeta.routeType,
-        isStream: logMeta.isStream,
-      };
       const sseResult = await createSSEPluginTransform(
         plugins,
-        ctx,
+        pluginCtx,
         upstreamRes.status,
         responseHeaders
       );
@@ -273,46 +252,78 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
       });
     }
 
-    const [clientStream, logStream] = upstreamRes.body.tee();
+    // tap：在 pull 阶段同步落盘 + 转发，避免 tee + 临时文件 + 全量回读的内存放大。
+    // 落盘的是上游"原始 SSE 字节"，与历史语义一致（不含插件后改写视图）。
+    const capture = logger?.openStreamCapture(logMeta.requestId, dateStr) ?? null;
+    // 上游字节数：从上游真实读到的总字节数。与磁盘截断无关，与历史 stream_bytes 语义一致。
+    let upstreamBytes = 0;
+    let writeEventCalled = false;
+    const finalizeAndWriteEvent = (): void => {
+      if (writeEventCalled) return;
+      writeEventCalled = true;
+      const captureResult = capture?.finalize() ?? {
+        bytesWritten: 0,
+        truncated: false,
+        filePath: null,
+      };
+      logger?.writeEvent(
+        buildLogEvent(logMeta, targetUrl, proxy, Date.now(), {
+          upstream_status: sseStatus,
+          content_type_res: contentTypeRes,
+          response_headers: sseHeaders,
+          stream_bytes: upstreamBytes,
+          provider_request_id: providerRequestId,
+          ...(captureResult.filePath != null && { stream_file: captureResult.filePath }),
+          ...(captureResult.bytesWritten > 0 && {
+            stream_file_bytes: captureResult.bytesWritten,
+          }),
+          ...(captureResult.truncated && { stream_file_truncated: true }),
+          ...(requestBody !== undefined && { request_body: requestBody }),
+          ...pluginLogOverrides,
+        })
+      );
+    };
 
-    (async () => {
-      const tempPath = createTempStreamCapturePath(logMeta.requestId);
-      let streamBytes = 0;
-      let streamFile: string | null = null;
-
-      try {
-        const reader = logStream.getReader();
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          streamBytes += value.byteLength;
-          await appendTempStreamCapture(tempPath, value);
+    // 用一个手写的 ReadableStream 包装上游：
+    //  - 每个 chunk 同步落盘 + 转发给客户端；
+    //  - readable 被 cancel 时（客户端断开 / 下游 pipeThrough 失败）也会调用 cancel()，
+    //    保证写入 LogEvent 与关闭 fd；
+    //  - 上游 reader 在错误情况下被显式 release，避免 fd 泄漏。
+    // TODO(memopt): Response 在调用方既不消费也不 cancel 时无人触发 finalize；
+    // 生产路径上 HTTP server 在客户端断连时会 cancel response body，覆盖此场景。
+    // 若未来出现长时间无活动的孤儿 fd，可在此处补一个超时兜底。
+    const upstreamReader = upstreamRes.body.getReader();
+    const tappedStream = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        try {
+          const { done, value } = await upstreamReader.read();
+          if (done) {
+            controller.close();
+            finalizeAndWriteEvent();
+            return;
+          }
+          upstreamBytes += value.byteLength;
+          capture?.write(value);
+          controller.enqueue(value);
+        } catch (err) {
+          finalizeAndWriteEvent();
+          controller.error(err);
         }
+      },
+      cancel(reason) {
+        // 客户端中途 cancel 或下游异常：仍写出事件，避免 fd 与队列泄漏。
+        try {
+          upstreamReader.cancel(reason).catch(() => undefined);
+        } finally {
+          finalizeAndWriteEvent();
+        }
+      },
+    });
 
-        streamFile = await flushTempCaptureToLogger(tempPath, logMeta.requestId, dateStr, logger);
-      } catch (err) {
-        await unlink(tempPath).catch(() => undefined);
-        console.error('[logger] 流式日志处理失败:', err);
-      } finally {
-        logger?.writeEvent(
-          buildLogEvent(logMeta, targetUrl, proxy, Date.now(), {
-            upstream_status: sseStatus,
-            content_type_res: contentTypeRes,
-            response_headers: sseHeaders,
-            stream_bytes: streamBytes,
-            provider_request_id: providerRequestId,
-            ...(streamFile != null && { stream_file: streamFile }),
-            ...(requestBody !== undefined && { request_body: requestBody }),
-            ...pluginLogOverrides,
-          })
-        );
-      }
-    })();
+    let stream: ReadableStream<Uint8Array> = tappedStream;
+    if (sseTransform) stream = stream.pipeThrough(sseTransform);
 
-    const outputBody = sseTransform ? clientStream.pipeThrough(sseTransform) : clientStream;
-
-    return new Response(outputBody, {
+    return new Response(stream, {
       status: sseStatus,
       headers: sseHeaders,
     });
@@ -325,17 +336,9 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
 
   // JSON 响应插件处理
   if (hasPlugins) {
-    const ctx: PluginContext = {
-      requestId: logMeta.requestId,
-      provider: logMeta.provider,
-      modelIn: logMeta.modelIn,
-      modelOut: logMeta.modelOut,
-      routeType: logMeta.routeType,
-      isStream: logMeta.isStream,
-    };
     const result = await executeJsonResponsePlugins(
       plugins,
-      ctx,
+      pluginCtx,
       upstreamRes.status,
       responseHeaders,
       responseText
