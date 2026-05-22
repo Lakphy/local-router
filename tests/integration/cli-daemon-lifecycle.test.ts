@@ -3,36 +3,26 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-function runCli(args: string[]): { exitCode: number; stdout: string; stderr: string } {
-  const proc = Bun.spawnSync(['bun', 'run', 'src/cli.ts', ...args], {
-    cwd: process.cwd(),
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  return {
-    exitCode: proc.exitCode,
-    stdout: proc.stdout.toString(),
-    stderr: proc.stderr.toString(),
-  };
-}
-
 describe('CLI daemon lifecycle', () => {
   test('start --daemon / status --json / stop', async () => {
-    const preStatus = runCli(['status', '--json']);
-    if (preStatus.exitCode === 0) {
-      try {
-        const parsed = JSON.parse(preStatus.stdout) as { running?: boolean };
-        if (parsed.running) {
-          // 避免影响已在本机运行的实例，跳过该测试。
-          expect(true).toBe(true);
-          return;
-        }
-      } catch {
-        // ignore parse error and continue
-      }
-    }
-
+    // 用独立 LOCAL_ROUTER_RUNTIME_DIR 隔离开发机上已运行的实例，避免覆盖 status.json
     const dir = mkdtempSync(join(tmpdir(), 'local-router-cli-daemon-'));
+    const runtimeDir = mkdtempSync(join(tmpdir(), 'local-router-cli-runtime-'));
+    const env = { ...process.env, LOCAL_ROUTER_RUNTIME_DIR: runtimeDir };
+    const runCli = (args: string[]): { exitCode: number; stdout: string; stderr: string } => {
+      const proc = Bun.spawnSync(['bun', 'run', 'src/cli.ts', ...args], {
+        cwd: process.cwd(),
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env,
+      });
+      return {
+        exitCode: proc.exitCode,
+        stdout: proc.stdout.toString(),
+        stderr: proc.stderr.toString(),
+      };
+    };
+
     const configPath = join(dir, 'config.json5');
     const port = 43120 + Math.floor(Math.random() * 200);
     const minimalConfig = `{
@@ -60,13 +50,18 @@ describe('CLI daemon lifecycle', () => {
 
       const status = runCli(['status', '--json']);
       expect(status.exitCode).toBe(0);
-      const statusJson = JSON.parse(status.stdout) as {
-        running: boolean;
-        mode: string;
-        port: number;
-        baseUrl: string;
-        uptimeSeconds: number | null;
+      const envelope = JSON.parse(status.stdout) as {
+        ok: boolean;
+        data: {
+          running: boolean;
+          mode: string;
+          port: number;
+          baseUrl: string;
+          uptimeSeconds: number | null;
+        };
       };
+      expect(envelope.ok).toBe(true);
+      const statusJson = envelope.data;
       expect(statusJson.running).toBe(true);
       expect(statusJson.mode).toBe('daemon');
       expect(statusJson.port).toBe(port);
@@ -78,6 +73,7 @@ describe('CLI daemon lifecycle', () => {
     } finally {
       runCli(['stop']);
       rmSync(dir, { recursive: true, force: true });
+      rmSync(runtimeDir, { recursive: true, force: true });
     }
   });
 });

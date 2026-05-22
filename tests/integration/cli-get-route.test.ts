@@ -46,7 +46,15 @@ describe('CLI get-route', () => {
     );
 
     try {
-      const result = runCli(['get-route', '--type', 'anthropic-messages', '--config', configPath]);
+      const result = runCli([
+        'get-route',
+        '--type',
+        'anthropic-messages',
+        '--output',
+        'text',
+        '--config',
+        configPath,
+      ]);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe(
         'sonnet : anthropic / claude-sonnet-4-5 | haiku : anthropic / claude-haiku-4-5 | default : anthropic / claude-haiku-4-5'
@@ -90,6 +98,8 @@ describe('CLI get-route', () => {
         'anthropic-messages',
         '--model-alias',
         'sonnet',
+        '--output',
+        'text',
         '--config',
         configPath,
       ]);
@@ -102,6 +112,8 @@ describe('CLI get-route', () => {
         'anthropic-messages',
         '--model-alias',
         'unknown',
+        '--output',
+        'text',
         '--config',
         configPath,
       ]);

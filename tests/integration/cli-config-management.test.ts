@@ -107,9 +107,13 @@ describe('CLI config management', () => {
         configPath,
       ]);
       expect(resolve.exitCode).toBe(0);
-      const resolved = JSON.parse(resolve.stdout) as { provider: string; targetModel: string };
-      expect(resolved.provider).toBe('p2');
-      expect(resolved.targetModel).toBe('gpt-4o-mini');
+      const resolved = JSON.parse(resolve.stdout) as {
+        ok: boolean;
+        data: { provider: string; targetModel: string };
+      };
+      expect(resolved.ok).toBe(true);
+      expect(resolved.data.provider).toBe('p2');
+      expect(resolved.data.targetModel).toBe('gpt-4o-mini');
 
       const validate = runCli(['config', 'validate', '--config', configPath]);
       expect(validate.exitCode).toBe(0);

@@ -104,6 +104,89 @@ local-router version
 - `--daemon`：后台运行
 - `--idle-timeout <sec>`：设置 Bun 连接空闲超时（默认 600 秒，设为 `0` 可关闭）
 
+## AI 友好化（Markdown-first CLI）
+
+local-router 的 CLI 默认输出**结构化 Markdown**（标题 / 表格 / 代码块 / 提示），让 Claude Code、Cursor 等 AI agent 不用额外解析就能消费；脚本场景用 `-o json` 切到 envelope，`-o text` 兜底到旧文案。
+
+### 全局 flags
+
+```
+-o, --output markdown|json|ndjson|text   默认 markdown；env LOCAL_ROUTER_FORMAT
+--json                                    -o json 别名
+-q, --quiet
+-v, --verbose
+--no-color                                env NO_COLOR
+--no-interactive                          env LOCAL_ROUTER_NO_INTERACTIVE
+--yes
+--config <path>                           env LOCAL_ROUTER_CONFIG
+LOCAL_ROUTER_RUNTIME_DIR=<dir>            隔离 daemon 状态目录（CI / 测试用）
+```
+
+### 输出契约
+
+- **Markdown（默认）**：顶部 `## <command>` 标题 + blockquote meta + `### 数据`/`### 错误`/`### 提示` 子段，命令一旦发布 schema 即视为契约。
+- **JSON**：成功 `{ ok:true, command, schema_version, data, meta }`；失败 `{ ok:false, error:{code,message,hint,doc,details}, exit_code }`。
+- **NDJSON**：流式命令每行一个 `{ type:"event"|"end"|"error", ... }`。
+- **退出码**：`0` ok / `2` 用法 / `3` 未运行 / `4` 状态冲突 / `5` 校验失败 / `6` 资源不存在 / `7` 超时 / `8` 健康失败 / `9` 上游不可达 / `10` 需要交互。
+
+### 自描述与引导命令（给 AI 的入口）
+
+```sh
+local-router commands --json                      # 全部命令元信息
+local-router help <cmd> --json                    # 单命令 flags + examples
+local-router schema config|cli|errors --json      # schema 导出
+local-router capabilities --json                  # 版本 / provider 类型 / 特性
+local-router agents-md > AGENTS.md                # 给 AI 看的完整 cheatsheet
+local-router doctor                               # 自检 config/端口/服务/上游
+local-router docs errors PROVIDER_REFERENCED_BY_ROUTE
+```
+
+### 配置可预演（dry-run）+ 批量导入
+
+所有写命令支持 `--dry-run`，输出 unified diff 后再决定是否写入。
+
+```sh
+local-router config provider add openai \
+  --type openai-completions --base ... --api-key ... --model gpt-4o-mini \
+  --dry-run --json | jq .data.diff
+
+local-router config patch --file - --dry-run <<'EOF'
+[{"op":"add","path":"/providers/demo","value":{"type":"openai-completions","base":"https://x","apiKey":"sk-1","models":{"m":{}}}}]
+EOF
+
+local-router config import --merge --file - < new-config.json5
+local-router config diff --against <backup-id>
+local-router config backups list
+local-router config rollback <backup-id>
+local-router config show          # 默认掩码；--show-secrets 看原文
+```
+
+### 端到端调试
+
+```sh
+local-router status --wait-running --timeout 10 --json
+local-router explain route --entry openai-completions --model gpt-4o-mini --json
+local-router try --entry openai-completions --model gpt-4o-mini --prompt ping --json
+local-router try ... --stream --output ndjson | jq .       # 流式
+local-router ping openai
+```
+
+### 日志（HTTP API → CLI 投影）
+
+```sh
+local-router logs events --window 1h --has-error --limit 5
+local-router logs event <id> --include-stream
+local-router logs last-error --json                # 最近一条错误（AI 调试金钥匙）
+local-router logs metrics
+local-router logs tail --output ndjson              # 实时事件流
+local-router logs replay <event-id> --dry-run       # 用同样参数复发一次
+local-router logs export --format jsonl --window 24h > out.jsonl
+```
+
+### 兼容回退
+
+旧脚本若硬编码旧文案，加 `--output text` 或 `LOCAL_ROUTER_FORMAT=text` 完整还原行为。`--json` 现在是 envelope 形式（`.data` 取数据），相比 v0.4 是 breaking change。
+
 ## 请求入口（给你的应用调用）
 
 把应用的 base URL 指向 local-router 后，使用以下入口：

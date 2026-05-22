@@ -13,8 +13,13 @@ export interface RuntimeState {
   logFile?: string;
 }
 
+/**
+ * Resolve the runtime root directory. Honors `LOCAL_ROUTER_RUNTIME_DIR` so
+ * tests / CI can isolate state from the developer's home daemon.
+ */
 export function getRuntimeDirs(): { root: string; run: string; logs: string } {
-  const root = join(homedir(), '.local-router');
+  const override = process.env.LOCAL_ROUTER_RUNTIME_DIR;
+  const root = override?.trim() ? override.trim() : join(homedir(), '.local-router');
   return {
     root,
     run: join(root, 'run'),
