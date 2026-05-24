@@ -36,6 +36,7 @@ function createSummary(id = 'log-1') {
     userIdRaw: 'user-a_account__session_session-1',
     userKey: 'user-a',
     sessionId: 'session-1',
+    tokenUsage: null,
   };
 }
 
@@ -50,6 +51,21 @@ function createEventsResponse(overrides: Partial<LogEventsResponse> = {}): LogEv
       errorRate: 0,
       avgLatencyMs: 120,
       p95LatencyMs: 120,
+      tokenUsageCount: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      cachedInputTokens: 0,
+      cacheHitInputTokens: 0,
+      cacheHitRate: 0,
+      cacheHitRateDenominatorTokens: 0,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheWriteInputTokens: 0,
+      cacheMissInputTokens: 0,
+      reasoningTokens: 0,
+      billableInputTokens: 0,
+      billableOutputTokens: 0,
     },
     meta: {
       scannedFiles: 0,

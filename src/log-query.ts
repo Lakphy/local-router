@@ -6,6 +6,7 @@ import { resolveLogBaseDir } from './config';
 import { getIndexedLogEventDetail, queryIndexedLogEvents } from './log-index';
 import { resolveLogSessionIdentity } from './log-session-identity';
 import type { LogEvent } from './logger';
+import { extractTokenUsageSummaryFromLogEvent, type TokenUsageSummary } from './token-usage';
 
 export type LogQueryWindow = '1h' | '6h' | '24h';
 export type LogSort = 'time_desc' | 'time_asc';
@@ -32,6 +33,7 @@ interface LocatedLogEvent {
   level: LogLevel;
   statusClass: StatusClass;
   event: LogEvent;
+  tokenUsage: TokenUsageSummary | null;
 }
 
 export interface LogEventSummary {
@@ -55,6 +57,7 @@ export interface LogEventSummary {
   userIdRaw: string | null;
   userKey: string | null;
   sessionId: string | null;
+  tokenUsage: TokenUsageSummary | null;
 }
 
 export interface LogQueryStats {
@@ -63,6 +66,21 @@ export interface LogQueryStats {
   errorRate: number;
   avgLatencyMs: number;
   p95LatencyMs: number;
+  tokenUsageCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedInputTokens: number;
+  cacheHitInputTokens: number;
+  cacheHitRate: number;
+  cacheHitRateDenominatorTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheWriteInputTokens: number;
+  cacheMissInputTokens: number;
+  reasoningTokens: number;
+  billableInputTokens: number;
+  billableOutputTokens: number;
 }
 
 export interface LogQueryMeta {
@@ -104,6 +122,15 @@ export interface LogEventDetail {
     model: string;
     modelIn: string;
     modelOut: string;
+    tokenUsage: TokenUsageSummary | null;
+  };
+  usage: {
+    tokenUsage: TokenUsageSummary | null;
+    requestBytes: number;
+    responseBytes: number | null;
+    streamBytes: number | null;
+    streamFileBytes: number | null;
+    streamFileTruncated: boolean;
   };
   request: {
     method: string;
@@ -310,6 +337,20 @@ interface RunningStats {
   errorCount: number;
   latencySum: number;
   latencyCounts: Map<number, number>;
+  tokenUsageCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedInputTokens: number;
+  cacheHitInputTokens: number;
+  cacheHitRateDenominatorTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheWriteInputTokens: number;
+  cacheMissInputTokens: number;
+  reasoningTokens: number;
+  billableInputTokens: number;
+  billableOutputTokens: number;
 }
 
 function createRunningStats(): RunningStats {
@@ -318,7 +359,25 @@ function createRunningStats(): RunningStats {
     errorCount: 0,
     latencySum: 0,
     latencyCounts: new Map(),
+    tokenUsageCount: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    cachedInputTokens: 0,
+    cacheHitInputTokens: 0,
+    cacheHitRateDenominatorTokens: 0,
+    cacheReadInputTokens: 0,
+    cacheCreationInputTokens: 0,
+    cacheWriteInputTokens: 0,
+    cacheMissInputTokens: 0,
+    reasoningTokens: 0,
+    billableInputTokens: 0,
+    billableOutputTokens: 0,
   };
+}
+
+function addNullable(total: number, value: number | null | undefined): number {
+  return total + (value ?? 0);
 }
 
 function updateRunningStats(stats: RunningStats, item: LocatedLogEvent): void {
@@ -331,6 +390,32 @@ function updateRunningStats(stats: RunningStats, item: LocatedLogEvent): void {
   stats.latencySum += latency;
   const roundedLatency = Math.round(latency);
   stats.latencyCounts.set(roundedLatency, (stats.latencyCounts.get(roundedLatency) ?? 0) + 1);
+
+  const usage = item.tokenUsage;
+  if (!usage) return;
+  stats.tokenUsageCount += 1;
+  stats.inputTokens = addNullable(stats.inputTokens, usage.inputTokens);
+  stats.outputTokens = addNullable(stats.outputTokens, usage.outputTokens);
+  stats.totalTokens = addNullable(stats.totalTokens, usage.totalTokens);
+  stats.cachedInputTokens = addNullable(stats.cachedInputTokens, usage.cachedInputTokens);
+  stats.cacheHitInputTokens = addNullable(stats.cacheHitInputTokens, usage.cacheHitInputTokens);
+  stats.cacheHitRateDenominatorTokens = addNullable(
+    stats.cacheHitRateDenominatorTokens,
+    usage.cacheHitRateDenominatorTokens
+  );
+  stats.cacheReadInputTokens = addNullable(stats.cacheReadInputTokens, usage.cacheReadInputTokens);
+  stats.cacheCreationInputTokens = addNullable(
+    stats.cacheCreationInputTokens,
+    usage.cacheCreationInputTokens
+  );
+  stats.cacheWriteInputTokens = addNullable(
+    stats.cacheWriteInputTokens,
+    usage.cacheWriteInputTokens
+  );
+  stats.cacheMissInputTokens = addNullable(stats.cacheMissInputTokens, usage.cacheMissInputTokens);
+  stats.reasoningTokens = addNullable(stats.reasoningTokens, usage.reasoningTokens);
+  stats.billableInputTokens = addNullable(stats.billableInputTokens, usage.billableInputTokens);
+  stats.billableOutputTokens = addNullable(stats.billableOutputTokens, usage.billableOutputTokens);
 }
 
 function percentileFromCounts(
@@ -361,6 +446,21 @@ function finalizeStats(stats: RunningStats): LogQueryStats {
       errorRate: 0,
       avgLatencyMs: 0,
       p95LatencyMs: 0,
+      tokenUsageCount: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      cachedInputTokens: 0,
+      cacheHitInputTokens: 0,
+      cacheHitRate: 0,
+      cacheHitRateDenominatorTokens: 0,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheWriteInputTokens: 0,
+      cacheMissInputTokens: 0,
+      reasoningTokens: 0,
+      billableInputTokens: 0,
+      billableOutputTokens: 0,
     };
   }
 
@@ -370,7 +470,26 @@ function finalizeStats(stats: RunningStats): LogQueryStats {
     errorRate: toPercent(stats.errorCount, stats.total),
     avgLatencyMs: Math.round(stats.latencySum / stats.total),
     p95LatencyMs: percentileFromCounts(stats.latencyCounts, stats.total, 0.95),
+    tokenUsageCount: stats.tokenUsageCount,
+    inputTokens: stats.inputTokens,
+    outputTokens: stats.outputTokens,
+    totalTokens: stats.totalTokens,
+    cachedInputTokens: stats.cachedInputTokens,
+    cacheHitInputTokens: stats.cacheHitInputTokens,
+    cacheHitRate: toPercent(stats.cacheHitInputTokens, stats.cacheHitRateDenominatorTokens),
+    cacheHitRateDenominatorTokens: stats.cacheHitRateDenominatorTokens,
+    cacheReadInputTokens: stats.cacheReadInputTokens,
+    cacheCreationInputTokens: stats.cacheCreationInputTokens,
+    cacheWriteInputTokens: stats.cacheWriteInputTokens,
+    cacheMissInputTokens: stats.cacheMissInputTokens,
+    reasoningTokens: stats.reasoningTokens,
+    billableInputTokens: stats.billableInputTokens,
+    billableOutputTokens: stats.billableOutputTokens,
   };
+}
+
+function createEmptyLogQueryStats(): LogQueryStats {
+  return finalizeStats(createRunningStats());
 }
 
 function compareLocatedEvents(a: LocatedLogEvent, b: LocatedLogEvent, sort: LogSort): number {
@@ -457,6 +576,7 @@ function eventToSummary(item: LocatedLogEvent): LogEventSummary {
     userIdRaw: identity.userIdRaw,
     userKey: identity.userKey,
     sessionId: identity.sessionId,
+    tokenUsage: item.tokenUsage,
   };
 }
 
@@ -473,6 +593,7 @@ export function createLogEventSummaryFromEvent(
     level: getLevel(event),
     statusClass: getStatusClass(event),
     event,
+    tokenUsage: extractTokenUsageSummaryFromLogEvent(event),
   });
 }
 
@@ -620,6 +741,11 @@ async function buildLogEventDetail(
     resolveLogBaseDir(context.logConfig),
     event.stream_file
   );
+  const tokenUsage =
+    extractTokenUsageSummaryFromLogEvent(event, {
+      baseDir: resolveLogBaseDir(context.logConfig),
+      streamContent: streamContent ?? undefined,
+    }) ?? null;
 
   // 构建插件相关信息
   const hasPluginData =
@@ -658,6 +784,15 @@ async function buildLogEventDetail(
       model: event.model_out || event.model_in,
       modelIn: event.model_in,
       modelOut: event.model_out,
+      tokenUsage,
+    },
+    usage: {
+      tokenUsage,
+      requestBytes: event.request_bytes ?? 0,
+      responseBytes: event.response_bytes ?? null,
+      streamBytes: event.stream_bytes ?? null,
+      streamFileBytes: event.stream_file_bytes ?? null,
+      streamFileTruncated: event.stream_file_truncated === true,
     },
     request: {
       method: event.method,
@@ -710,13 +845,7 @@ async function scanEvents(
   if (!existsSync(eventsDir)) {
     return {
       items: [],
-      stats: {
-        total: 0,
-        errorCount: 0,
-        errorRate: 0,
-        avgLatencyMs: 0,
-        p95LatencyMs: 0,
-      },
+      stats: createEmptyLogQueryStats(),
       meta: {
         scannedFiles: 0,
         scannedLines: 0,
@@ -803,6 +932,7 @@ async function scanEvents(
       if (query.hasError !== null && query.hasError !== hasError) continue;
       if (!containsKeyword(event, query.q)) continue;
 
+      const tokenUsage = extractTokenUsageSummaryFromLogEvent(event, { baseDir });
       const located: LocatedLogEvent = {
         id: encodeEventId(date, lineNumber),
         date,
@@ -811,6 +941,7 @@ async function scanEvents(
         level,
         statusClass,
         event,
+        tokenUsage,
       };
 
       updateRunningStats(runningStats, located);
@@ -895,13 +1026,7 @@ async function queryLogEventsInternal(
       items: [],
       nextCursor: null,
       hasMore: false,
-      stats: {
-        total: 0,
-        errorCount: 0,
-        errorRate: 0,
-        avgLatencyMs: 0,
-        p95LatencyMs: 0,
-      },
+      stats: createEmptyLogQueryStats(),
       meta: {
         scannedFiles: 0,
         scannedLines: 0,
@@ -1012,6 +1137,7 @@ function escapeCsvValue(value: unknown): string {
 }
 
 function toCsvRow(item: LogEventSummary): string {
+  const usage = item.tokenUsage;
   return [
     item.id,
     item.ts,
@@ -1033,6 +1159,35 @@ function toCsvRow(item: LogEventSummary): string {
     item.sessionId ?? '',
     item.message,
     item.errorType ?? '',
+    usage?.inputTokens ?? '',
+    usage?.outputTokens ?? '',
+    usage?.totalTokens ?? '',
+    usage?.cachedInputTokens ?? '',
+    usage?.cacheHitInputTokens ?? '',
+    usage?.cacheHitRate ?? '',
+    usage?.cacheHitRateDenominatorTokens ?? '',
+    usage?.cacheReadInputTokens ?? '',
+    usage?.cacheCreationInputTokens ?? '',
+    usage?.cacheCreationInputTokens5m ?? '',
+    usage?.cacheCreationInputTokens1h ?? '',
+    usage?.cacheWriteInputTokens ?? '',
+    usage?.cacheMissInputTokens ?? '',
+    usage?.reasoningTokens ?? '',
+    usage?.audioInputTokens ?? '',
+    usage?.audioOutputTokens ?? '',
+    usage?.textInputTokens ?? '',
+    usage?.textOutputTokens ?? '',
+    usage?.acceptedPredictionTokens ?? '',
+    usage?.rejectedPredictionTokens ?? '',
+    usage?.toolUsePromptTokens ?? '',
+    usage?.billableInputTokens ?? '',
+    usage?.billableOutputTokens ?? '',
+    usage?.creditUsage ?? '',
+    usage?.cost ?? '',
+    usage?.providerStyle ?? '',
+    usage?.source ?? '',
+    usage?.rawUsagePath ?? '',
+    usage?.cacheHitRateFormula ?? '',
   ]
     .map(escapeCsvValue)
     .join(',');
@@ -1061,6 +1216,35 @@ function createCsvExportStream(items: LogEventSummary[]): ReadableStream<Uint8Ar
     'sessionId',
     'message',
     'errorType',
+    'usage.inputTokens',
+    'usage.outputTokens',
+    'usage.totalTokens',
+    'usage.cachedInputTokens',
+    'usage.cacheHitInputTokens',
+    'usage.cacheHitRate',
+    'usage.cacheHitRateDenominatorTokens',
+    'usage.cacheReadInputTokens',
+    'usage.cacheCreationInputTokens',
+    'usage.cacheCreationInputTokens5m',
+    'usage.cacheCreationInputTokens1h',
+    'usage.cacheWriteInputTokens',
+    'usage.cacheMissInputTokens',
+    'usage.reasoningTokens',
+    'usage.audioInputTokens',
+    'usage.audioOutputTokens',
+    'usage.textInputTokens',
+    'usage.textOutputTokens',
+    'usage.acceptedPredictionTokens',
+    'usage.rejectedPredictionTokens',
+    'usage.toolUsePromptTokens',
+    'usage.billableInputTokens',
+    'usage.billableOutputTokens',
+    'usage.creditUsage',
+    'usage.cost',
+    'usage.providerStyle',
+    'usage.source',
+    'usage.rawUsagePath',
+    'usage.cacheHitRateFormula',
   ];
 
   return new ReadableStream<Uint8Array>({

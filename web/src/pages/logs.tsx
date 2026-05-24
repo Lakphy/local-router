@@ -49,6 +49,17 @@ function fromDateTimeLocalValue(value: string): string {
   return date.toISOString();
 }
 
+function formatCompact(value: number | null | undefined): string {
+  return Intl.NumberFormat(undefined, {
+    notation: Math.abs(value ?? 0) >= 100_000 ? 'compact' : 'standard',
+    maximumFractionDigits: 1,
+  }).format(value ?? 0);
+}
+
+function formatPercent(value: number | null | undefined): string {
+  return `${(value ?? 0).toFixed(2).replace(/\.?0+$/, '')}%`;
+}
+
 export function LogsPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: '/logs' });
@@ -392,15 +403,16 @@ export function LogsPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
         <StatBox title="总条数" value={stats?.total ?? 0} />
-        <StatBox title="错误率" value={`${stats?.errorRate ?? 0}%`} />
+        <StatBox title="Total Token" value={formatCompact(stats?.totalTokens)} />
+        <StatBox title="Input Token" value={formatCompact(stats?.inputTokens)} />
+        <StatBox title="Output Token" value={formatCompact(stats?.outputTokens)} />
+        <StatBox title="缓存命中率" value={formatPercent(stats?.cacheHitRate)} />
+        <StatBox title="缓存命中 Token" value={formatCompact(stats?.cacheHitInputTokens)} />
+        <StatBox title="Reasoning Token" value={formatCompact(stats?.reasoningTokens)} />
+        <StatBox title="错误率" value={formatPercent(stats?.errorRate)} />
         <StatBox title="P95" value={`${stats?.p95LatencyMs ?? 0} ms`} />
-        <StatBox title="平均延迟" value={`${stats?.avgLatencyMs ?? 0} ms`} />
-        <StatBox
-          title={meta?.indexUsed ? '索引刷新行' : '扫描行数'}
-          value={meta?.scannedLines ?? 0}
-        />
       </div>
 
       <div className="rounded-lg border bg-background">

@@ -13,6 +13,7 @@ import type { LogConfig } from './config';
 import { resolveLogBaseDir } from './config';
 import { resolveLogSessionIdentity } from './log-session-identity';
 import type { LogEvent } from './logger';
+import { extractTokenUsageSummaryFromLogEvent, type TokenUsageSummary } from './token-usage';
 
 export type IndexedLogLevel = 'info' | 'error';
 export type IndexedStatusClass = '2xx' | '4xx' | '5xx' | 'network_error';
@@ -66,6 +67,7 @@ export interface IndexedLogEventSummary {
   userIdRaw: string | null;
   userKey: string | null;
   sessionId: string | null;
+  tokenUsage: TokenUsageSummary | null;
 }
 
 export interface IndexedLogStats {
@@ -74,6 +76,21 @@ export interface IndexedLogStats {
   errorRate: number;
   avgLatencyMs: number;
   p95LatencyMs: number;
+  tokenUsageCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedInputTokens: number;
+  cacheHitInputTokens: number;
+  cacheHitRate: number;
+  cacheHitRateDenominatorTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheWriteInputTokens: number;
+  cacheMissInputTokens: number;
+  reasoningTokens: number;
+  billableInputTokens: number;
+  billableOutputTokens: number;
 }
 
 export interface IndexedLogMeta {
@@ -133,6 +150,7 @@ interface LogEventRow {
   user_key: string | null;
   session_id: string | null;
   ts_ms: number;
+  token_usage_json: string | null;
 }
 
 interface IndexFileRow {
@@ -155,7 +173,7 @@ interface JsonlLine {
   byteLength: number;
 }
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 3;
 const MAX_INDEX_QUEUE = 20_000;
 const INDEX_BATCH_SIZE = 250;
 const INDEX_FLUSH_DELAY_MS = 50;
@@ -310,6 +328,7 @@ function escapeLikePattern(value: string): string {
 }
 
 function eventToRow(input: {
+  baseDir: string;
   id: string;
   date: string;
   filePath: string;
@@ -328,6 +347,7 @@ function eventToRow(input: {
   const statusClass = getStatusClass(event);
   const latencyMs = Math.max(0, event.latency_ms ?? 0);
   const model = event.model_out || event.model_in;
+  const tokenUsage = extractTokenUsageSummaryFromLogEvent(event, { baseDir: input.baseDir });
 
   return {
     id: input.id,
@@ -357,7 +377,45 @@ function eventToRow(input: {
     byte_offset: input.offset,
     byte_length: input.byteLength,
     search_text: buildSearchText(event),
+    token_input: tokenUsage?.inputTokens ?? null,
+    token_output: tokenUsage?.outputTokens ?? null,
+    token_total: tokenUsage?.totalTokens ?? null,
+    token_cached_input: tokenUsage?.cachedInputTokens ?? null,
+    token_cache_hit_input: tokenUsage?.cacheHitInputTokens ?? null,
+    token_cache_hit_rate: tokenUsage?.cacheHitRate ?? null,
+    token_cache_hit_rate_denominator: tokenUsage?.cacheHitRateDenominatorTokens ?? null,
+    token_cache_read_input: tokenUsage?.cacheReadInputTokens ?? null,
+    token_cache_creation_input: tokenUsage?.cacheCreationInputTokens ?? null,
+    token_cache_creation_input_5m: tokenUsage?.cacheCreationInputTokens5m ?? null,
+    token_cache_creation_input_1h: tokenUsage?.cacheCreationInputTokens1h ?? null,
+    token_cache_write_input: tokenUsage?.cacheWriteInputTokens ?? null,
+    token_cache_miss_input: tokenUsage?.cacheMissInputTokens ?? null,
+    token_reasoning: tokenUsage?.reasoningTokens ?? null,
+    token_audio_input: tokenUsage?.audioInputTokens ?? null,
+    token_audio_output: tokenUsage?.audioOutputTokens ?? null,
+    token_text_input: tokenUsage?.textInputTokens ?? null,
+    token_text_output: tokenUsage?.textOutputTokens ?? null,
+    token_accepted_prediction: tokenUsage?.acceptedPredictionTokens ?? null,
+    token_rejected_prediction: tokenUsage?.rejectedPredictionTokens ?? null,
+    token_tool_use_prompt: tokenUsage?.toolUsePromptTokens ?? null,
+    token_billable_input: tokenUsage?.billableInputTokens ?? null,
+    token_billable_output: tokenUsage?.billableOutputTokens ?? null,
+    token_credit_usage: tokenUsage?.creditUsage ?? null,
+    token_cost: tokenUsage?.cost ?? null,
+    token_source: tokenUsage?.source ?? null,
+    token_provider_style: tokenUsage?.providerStyle ?? null,
+    token_raw_usage_path: tokenUsage?.rawUsagePath ?? null,
+    token_usage_json: tokenUsage ? JSON.stringify(tokenUsage) : null,
   };
+}
+
+function parseTokenUsageSummary(value: string | null): TokenUsageSummary | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as TokenUsageSummary;
+  } catch {
+    return null;
+  }
 }
 
 function rowToSummary(row: LogEventRow): IndexedLogEventSummary {
@@ -382,6 +440,7 @@ function rowToSummary(row: LogEventRow): IndexedLogEventSummary {
     userIdRaw: row.user_id_raw,
     userKey: row.user_key,
     sessionId: row.session_id,
+    tokenUsage: parseTokenUsageSummary(row.token_usage_json),
   };
 }
 
@@ -460,6 +519,21 @@ function createEmptyStats(): IndexedLogStats {
     errorRate: 0,
     avgLatencyMs: 0,
     p95LatencyMs: 0,
+    tokenUsageCount: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    cachedInputTokens: 0,
+    cacheHitInputTokens: 0,
+    cacheHitRate: 0,
+    cacheHitRateDenominatorTokens: 0,
+    cacheReadInputTokens: 0,
+    cacheCreationInputTokens: 0,
+    cacheWriteInputTokens: 0,
+    cacheMissInputTokens: 0,
+    reasoningTokens: 0,
+    billableInputTokens: 0,
+    billableOutputTokens: 0,
   };
 }
 
@@ -581,12 +655,28 @@ class LogIndex {
         id, ts_ms, ts_start, level, provider, route_type, model, model_in, model_out,
         path, request_id, latency_ms, upstream_status, status_class, has_error,
         message, error_type, has_metadata, user_id_raw, user_key, session_id,
-        source_date, source_file, line_number, byte_offset, byte_length, search_text
+        source_date, source_file, line_number, byte_offset, byte_length, search_text,
+        token_input, token_output, token_total, token_cached_input, token_cache_hit_input,
+        token_cache_hit_rate, token_cache_hit_rate_denominator, token_cache_read_input,
+        token_cache_creation_input, token_cache_creation_input_5m, token_cache_creation_input_1h,
+        token_cache_write_input, token_cache_miss_input, token_reasoning, token_audio_input,
+        token_audio_output, token_text_input, token_text_output, token_accepted_prediction,
+        token_rejected_prediction, token_tool_use_prompt, token_billable_input,
+        token_billable_output, token_credit_usage, token_cost, token_source,
+        token_provider_style, token_raw_usage_path, token_usage_json
       ) VALUES (
         $id, $ts_ms, $ts_start, $level, $provider, $route_type, $model, $model_in, $model_out,
         $path, $request_id, $latency_ms, $upstream_status, $status_class, $has_error,
         $message, $error_type, $has_metadata, $user_id_raw, $user_key, $session_id,
-        $source_date, $source_file, $line_number, $byte_offset, $byte_length, $search_text
+        $source_date, $source_file, $line_number, $byte_offset, $byte_length, $search_text,
+        $token_input, $token_output, $token_total, $token_cached_input, $token_cache_hit_input,
+        $token_cache_hit_rate, $token_cache_hit_rate_denominator, $token_cache_read_input,
+        $token_cache_creation_input, $token_cache_creation_input_5m, $token_cache_creation_input_1h,
+        $token_cache_write_input, $token_cache_miss_input, $token_reasoning, $token_audio_input,
+        $token_audio_output, $token_text_input, $token_text_output, $token_accepted_prediction,
+        $token_rejected_prediction, $token_tool_use_prompt, $token_billable_input,
+        $token_billable_output, $token_credit_usage, $token_cost, $token_source,
+        $token_provider_style, $token_raw_usage_path, $token_usage_json
       )
     `);
     this.deleteFtsStmt = this.db.prepare('DELETE FROM log_events_fts WHERE event_id = ?');
@@ -711,7 +801,7 @@ class LogIndex {
             e.id, e.ts_start, e.level, e.provider, e.route_type, e.model, e.model_in,
             e.model_out, e.path, e.request_id, e.latency_ms, e.upstream_status,
             e.status_class, e.has_error, e.message, e.error_type, e.has_metadata,
-            e.user_id_raw, e.user_key, e.session_id, e.ts_ms
+            e.user_id_raw, e.user_key, e.session_id, e.ts_ms, e.token_usage_json
           FROM log_events e
           ${whereSql}
           ${cursorClause}
@@ -854,7 +944,36 @@ class LogIndex {
         line_number INTEGER,
         byte_offset INTEGER NOT NULL,
         byte_length INTEGER NOT NULL,
-        search_text TEXT NOT NULL
+        search_text TEXT NOT NULL,
+        token_input INTEGER,
+        token_output INTEGER,
+        token_total INTEGER,
+        token_cached_input INTEGER,
+        token_cache_hit_input INTEGER,
+        token_cache_hit_rate REAL,
+        token_cache_hit_rate_denominator INTEGER,
+        token_cache_read_input INTEGER,
+        token_cache_creation_input INTEGER,
+        token_cache_creation_input_5m INTEGER,
+        token_cache_creation_input_1h INTEGER,
+        token_cache_write_input INTEGER,
+        token_cache_miss_input INTEGER,
+        token_reasoning INTEGER,
+        token_audio_input INTEGER,
+        token_audio_output INTEGER,
+        token_text_input INTEGER,
+        token_text_output INTEGER,
+        token_accepted_prediction INTEGER,
+        token_rejected_prediction INTEGER,
+        token_tool_use_prompt INTEGER,
+        token_billable_input INTEGER,
+        token_billable_output INTEGER,
+        token_credit_usage REAL,
+        token_cost REAL,
+        token_source TEXT,
+        token_provider_style TEXT,
+        token_raw_usage_path TEXT,
+        token_usage_json TEXT
       );
 
       CREATE VIRTUAL TABLE IF NOT EXISTS log_events_fts
@@ -873,6 +992,25 @@ class LogIndex {
       CREATE INDEX IF NOT EXISTS idx_log_events_file ON log_events(source_file);
     `);
 
+    this.ensureTokenColumns();
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_log_events_token_total_time ON log_events(token_total, ts_ms DESC);
+      CREATE INDEX IF NOT EXISTS idx_log_events_token_input_time ON log_events(token_input, ts_ms DESC);
+      CREATE INDEX IF NOT EXISTS idx_log_events_token_cache_hit_rate_time ON log_events(token_cache_hit_rate, ts_ms DESC);
+    `);
+
+    const versionRow = this.db
+      .query("SELECT value FROM log_index_meta WHERE key = 'schema_version'")
+      .get() as { value: string } | null;
+    const previousVersion = Number.parseInt(versionRow?.value ?? '0', 10) || 0;
+    if (previousVersion > 0 && previousVersion < SCHEMA_VERSION) {
+      this.db.exec(`
+        DELETE FROM log_events_fts;
+        DELETE FROM log_events;
+        DELETE FROM log_index_files;
+      `);
+    }
+
     this.db
       .prepare(
         `
@@ -882,6 +1020,47 @@ class LogIndex {
       `
       )
       .run(String(SCHEMA_VERSION));
+  }
+
+  private ensureTokenColumns(): void {
+    const rows = this.db.query('PRAGMA table_info(log_events)').all() as Array<{ name: string }>;
+    const existing = new Set(rows.map((row) => row.name));
+    const columns: Array<{ name: string; type: string }> = [
+      { name: 'token_input', type: 'INTEGER' },
+      { name: 'token_output', type: 'INTEGER' },
+      { name: 'token_total', type: 'INTEGER' },
+      { name: 'token_cached_input', type: 'INTEGER' },
+      { name: 'token_cache_hit_input', type: 'INTEGER' },
+      { name: 'token_cache_hit_rate', type: 'REAL' },
+      { name: 'token_cache_hit_rate_denominator', type: 'INTEGER' },
+      { name: 'token_cache_read_input', type: 'INTEGER' },
+      { name: 'token_cache_creation_input', type: 'INTEGER' },
+      { name: 'token_cache_creation_input_5m', type: 'INTEGER' },
+      { name: 'token_cache_creation_input_1h', type: 'INTEGER' },
+      { name: 'token_cache_write_input', type: 'INTEGER' },
+      { name: 'token_cache_miss_input', type: 'INTEGER' },
+      { name: 'token_reasoning', type: 'INTEGER' },
+      { name: 'token_audio_input', type: 'INTEGER' },
+      { name: 'token_audio_output', type: 'INTEGER' },
+      { name: 'token_text_input', type: 'INTEGER' },
+      { name: 'token_text_output', type: 'INTEGER' },
+      { name: 'token_accepted_prediction', type: 'INTEGER' },
+      { name: 'token_rejected_prediction', type: 'INTEGER' },
+      { name: 'token_tool_use_prompt', type: 'INTEGER' },
+      { name: 'token_billable_input', type: 'INTEGER' },
+      { name: 'token_billable_output', type: 'INTEGER' },
+      { name: 'token_credit_usage', type: 'REAL' },
+      { name: 'token_cost', type: 'REAL' },
+      { name: 'token_source', type: 'TEXT' },
+      { name: 'token_provider_style', type: 'TEXT' },
+      { name: 'token_raw_usage_path', type: 'TEXT' },
+      { name: 'token_usage_json', type: 'TEXT' },
+    ];
+
+    for (const column of columns) {
+      if (existing.has(column.name)) continue;
+      this.db.exec(`ALTER TABLE log_events ADD COLUMN ${column.name} ${column.type}`);
+    }
   }
 
   private flushQueue(): void {
@@ -913,6 +1092,7 @@ class LogIndex {
     if (this.rebuildingFiles.has(item.filePath)) return;
     const id = encodeOffsetLogEventId(item.date, item.offset);
     const row = eventToRow({
+      baseDir: this.baseDir,
       id,
       date: item.date,
       filePath: item.filePath,
@@ -973,6 +1153,7 @@ class LogIndex {
         }
 
         const row = eventToRow({
+          baseDir: this.baseDir,
           id: encodeOffsetLogEventId(date, item.offset),
           date,
           filePath,
@@ -1012,11 +1193,43 @@ class LogIndex {
         SELECT
           COUNT(*) AS total,
           COALESCE(SUM(has_error), 0) AS errorCount,
-          COALESCE(AVG(latency_ms), 0) AS avgLatencyMs
+          COALESCE(AVG(latency_ms), 0) AS avgLatencyMs,
+          COALESCE(SUM(CASE WHEN token_usage_json IS NOT NULL THEN 1 ELSE 0 END), 0) AS tokenUsageCount,
+          COALESCE(SUM(token_input), 0) AS inputTokens,
+          COALESCE(SUM(token_output), 0) AS outputTokens,
+          COALESCE(SUM(token_total), 0) AS totalTokens,
+          COALESCE(SUM(token_cached_input), 0) AS cachedInputTokens,
+          COALESCE(SUM(token_cache_hit_input), 0) AS cacheHitInputTokens,
+          COALESCE(SUM(token_cache_hit_rate_denominator), 0) AS cacheHitRateDenominatorTokens,
+          COALESCE(SUM(token_cache_read_input), 0) AS cacheReadInputTokens,
+          COALESCE(SUM(token_cache_creation_input), 0) AS cacheCreationInputTokens,
+          COALESCE(SUM(token_cache_write_input), 0) AS cacheWriteInputTokens,
+          COALESCE(SUM(token_cache_miss_input), 0) AS cacheMissInputTokens,
+          COALESCE(SUM(token_reasoning), 0) AS reasoningTokens,
+          COALESCE(SUM(token_billable_input), 0) AS billableInputTokens,
+          COALESCE(SUM(token_billable_output), 0) AS billableOutputTokens
         FROM log_events e
         ${whereSql}
       `)
-      .get(...params) as { total: number; errorCount: number; avgLatencyMs: number };
+      .get(...params) as {
+      total: number;
+      errorCount: number;
+      avgLatencyMs: number;
+      tokenUsageCount: number;
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      cachedInputTokens: number;
+      cacheHitInputTokens: number;
+      cacheHitRateDenominatorTokens: number;
+      cacheReadInputTokens: number;
+      cacheCreationInputTokens: number;
+      cacheWriteInputTokens: number;
+      cacheMissInputTokens: number;
+      reasoningTokens: number;
+      billableInputTokens: number;
+      billableOutputTokens: number;
+    };
 
     const total = Number(aggregate.total) || 0;
     if (total <= 0) return createEmptyStats();
@@ -1039,6 +1252,24 @@ class LogIndex {
       errorRate: toPercent(errorCount, total),
       avgLatencyMs: Math.round(Number(aggregate.avgLatencyMs) || 0),
       p95LatencyMs: Math.round(p95Row?.latency_ms ?? 0),
+      tokenUsageCount: Number(aggregate.tokenUsageCount) || 0,
+      inputTokens: Number(aggregate.inputTokens) || 0,
+      outputTokens: Number(aggregate.outputTokens) || 0,
+      totalTokens: Number(aggregate.totalTokens) || 0,
+      cachedInputTokens: Number(aggregate.cachedInputTokens) || 0,
+      cacheHitInputTokens: Number(aggregate.cacheHitInputTokens) || 0,
+      cacheHitRate: toPercent(
+        Number(aggregate.cacheHitInputTokens) || 0,
+        Number(aggregate.cacheHitRateDenominatorTokens) || 0
+      ),
+      cacheHitRateDenominatorTokens: Number(aggregate.cacheHitRateDenominatorTokens) || 0,
+      cacheReadInputTokens: Number(aggregate.cacheReadInputTokens) || 0,
+      cacheCreationInputTokens: Number(aggregate.cacheCreationInputTokens) || 0,
+      cacheWriteInputTokens: Number(aggregate.cacheWriteInputTokens) || 0,
+      cacheMissInputTokens: Number(aggregate.cacheMissInputTokens) || 0,
+      reasoningTokens: Number(aggregate.reasoningTokens) || 0,
+      billableInputTokens: Number(aggregate.billableInputTokens) || 0,
+      billableOutputTokens: Number(aggregate.billableOutputTokens) || 0,
     };
   }
 }

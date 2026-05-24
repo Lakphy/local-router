@@ -218,6 +218,66 @@ describe('log-query 详情查询', () => {
     expect(detail?.location.line).toBe(5);
   });
 
+  test('SQLite 索引应回填 token usage 并聚合缓存命中率', async () => {
+    initLogger(tempDir, logConfig);
+
+    const filePath = join(tempDir, 'events', '2026-03-16.jsonl');
+    writeFileSync(
+      filePath,
+      `${[
+        createLogEvent(1, {
+          provider: 'openai',
+          response_body: JSON.stringify({
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 20,
+              total_tokens: 120,
+              prompt_tokens_details: { cached_tokens: 50 },
+            },
+          }),
+        }),
+        createLogEvent(2, {
+          provider: 'anthropic',
+          response_body: JSON.stringify({
+            usage: {
+              input_tokens: 10,
+              output_tokens: 4,
+              cache_read_input_tokens: 5,
+              cache_creation_input_tokens: 5,
+            },
+          }),
+        }),
+      ]
+        .map((event) => JSON.stringify(event))
+        .join('\n')}\n`
+    );
+
+    const data = await queryLogEvents(
+      { logConfig },
+      {
+        fromMs: Date.parse('2026-03-16T09:59:00.000Z'),
+        toMs: Date.parse('2026-03-16T10:01:00.000Z'),
+        sort: 'time_desc',
+        limit: 10,
+      }
+    );
+
+    expect(data.meta.indexUsed).toBe(true);
+    expect(data.items[0]?.tokenUsage?.providerStyle).toBe('anthropic');
+    expect(data.items[1]?.tokenUsage?.cacheHitInputTokens).toBe(50);
+    expect(data.stats.tokenUsageCount).toBe(2);
+    expect(data.stats.inputTokens).toBe(110);
+    expect(data.stats.outputTokens).toBe(24);
+    expect(data.stats.totalTokens).toBe(144);
+    expect(data.stats.cacheHitInputTokens).toBe(55);
+    expect(data.stats.cacheHitRateDenominatorTokens).toBe(120);
+    expect(data.stats.cacheHitRate).toBe(45.83);
+
+    const detail = await getLogEventDetailById({ logConfig }, data.items[0]!.id);
+    expect(detail?.usage.tokenUsage?.cacheReadInputTokens).toBe(5);
+    expect(detail?.usage.responseBytes).toBe(456);
+  });
+
   test('SQLite 索引未初始化时应回退 JSONL 扫描并支持旧 offset cursor', async () => {
     writeEventsFile(tempDir);
 

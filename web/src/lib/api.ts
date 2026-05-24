@@ -179,6 +179,55 @@ export interface LogEventSummary {
   userIdRaw: string | null;
   userKey: string | null;
   sessionId: string | null;
+  tokenUsage: TokenUsageSummary | null;
+}
+
+export interface TokenUsageSummary {
+  schemaVersion: 1;
+  source:
+    | 'explicit'
+    | 'response_body'
+    | 'response_body_after_plugins'
+    | 'response_body_before_plugins'
+    | 'stream_chunk'
+    | 'stream_file';
+  providerStyle:
+    | 'openai'
+    | 'anthropic'
+    | 'gemini'
+    | 'deepseek'
+    | 'cohere'
+    | 'mistral'
+    | 'openrouter'
+    | 'unknown';
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  cachedInputTokens: number | null;
+  cacheHitInputTokens: number | null;
+  cacheHitRate: number | null;
+  cacheHitRateDenominatorTokens: number | null;
+  cacheHitRateFormula: string | null;
+  cacheReadInputTokens: number | null;
+  cacheCreationInputTokens: number | null;
+  cacheCreationInputTokens5m: number | null;
+  cacheCreationInputTokens1h: number | null;
+  cacheWriteInputTokens: number | null;
+  cacheMissInputTokens: number | null;
+  reasoningTokens: number | null;
+  audioInputTokens: number | null;
+  audioOutputTokens: number | null;
+  textInputTokens: number | null;
+  textOutputTokens: number | null;
+  acceptedPredictionTokens: number | null;
+  rejectedPredictionTokens: number | null;
+  toolUsePromptTokens: number | null;
+  billableInputTokens: number | null;
+  billableOutputTokens: number | null;
+  creditUsage: number | null;
+  cost: number | null;
+  rawUsagePath: string | null;
+  warnings: string[];
 }
 
 export interface LogEventsResponse {
@@ -191,6 +240,21 @@ export interface LogEventsResponse {
     errorRate: number;
     avgLatencyMs: number;
     p95LatencyMs: number;
+    tokenUsageCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    cachedInputTokens: number;
+    cacheHitInputTokens: number;
+    cacheHitRate: number;
+    cacheHitRateDenominatorTokens: number;
+    cacheReadInputTokens: number;
+    cacheCreationInputTokens: number;
+    cacheWriteInputTokens: number;
+    cacheMissInputTokens: number;
+    reasoningTokens: number;
+    billableInputTokens: number;
+    billableOutputTokens: number;
   };
   meta: {
     scannedFiles: number;
@@ -263,6 +327,15 @@ export interface LogEventDetail {
     model: string;
     modelIn: string;
     modelOut: string;
+    tokenUsage: TokenUsageSummary | null;
+  };
+  usage: {
+    tokenUsage: TokenUsageSummary | null;
+    requestBytes: number;
+    responseBytes: number | null;
+    streamBytes: number | null;
+    streamFileBytes: number | null;
+    streamFileTruncated: boolean;
   };
   request: {
     method: string;

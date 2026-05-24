@@ -7,6 +7,7 @@ import {
   executeJsonResponsePlugins,
   executeRequestPlugins,
 } from './plugin-engine';
+import { createTokenUsageStreamCollector, extractTokenUsageFromResponseText } from './token-usage';
 
 export type { PluginPhaseLog } from './plugin';
 
@@ -255,6 +256,9 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
     // tap：在 pull 阶段同步落盘 + 转发，避免 tee + 临时文件 + 全量回读的内存放大。
     // 落盘的是上游"原始 SSE 字节"，与历史语义一致（不含插件后改写视图）。
     const capture = logger?.openStreamCapture(logMeta.requestId, dateStr) ?? null;
+    const tokenUsageCollector = createTokenUsageStreamCollector(
+      `${logMeta.provider} ${logMeta.routeType} ${logMeta.modelIn} ${logMeta.modelOut}`
+    );
     // 上游字节数：从上游真实读到的总字节数。与磁盘截断无关，与历史 stream_bytes 语义一致。
     let upstreamBytes = 0;
     let writeEventCalled = false;
@@ -266,6 +270,7 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
         truncated: false,
         filePath: null,
       };
+      const tokenUsage = tokenUsageCollector.getUsage();
       logger?.writeEvent(
         buildLogEvent(logMeta, targetUrl, proxy, Date.now(), {
           upstream_status: sseStatus,
@@ -278,6 +283,7 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
             stream_file_bytes: captureResult.bytesWritten,
           }),
           ...(captureResult.truncated && { stream_file_truncated: true }),
+          ...(tokenUsage && { token_usage: tokenUsage }),
           ...(requestBody !== undefined && { request_body: requestBody }),
           ...pluginLogOverrides,
         })
@@ -303,6 +309,7 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
             return;
           }
           upstreamBytes += value.byteLength;
+          tokenUsageCollector.addChunk(value);
           capture?.write(value);
           controller.enqueue(value);
         } catch (err) {
@@ -367,6 +374,11 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
 
   // 用最终客户端可见的值计算 response_bytes
   const responseBytes = Buffer.byteLength(responseText, 'utf-8');
+  const tokenUsage = extractTokenUsageFromResponseText(
+    responseText,
+    'response_body',
+    `${logMeta.provider} ${logMeta.routeType} ${logMeta.modelIn} ${logMeta.modelOut}`
+  );
 
   const eventOverrides: Partial<LogEvent> = {
     upstream_status: upstreamRes.status,
@@ -374,6 +386,7 @@ export async function proxyRequest(c: Context, options: ProxyRequestOptions): Pr
     response_headers: finalResponseHeaders,
     response_bytes: responseBytes,
     provider_request_id: providerRequestId,
+    ...(tokenUsage && { token_usage: tokenUsage }),
     ...pluginLogOverrides,
   };
 

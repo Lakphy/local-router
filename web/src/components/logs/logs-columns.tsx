@@ -2,7 +2,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowUpDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import type { LogEventSummary } from '@/lib/api';
+import type { LogEventSummary, TokenUsageSummary } from '@/lib/api';
 
 function LevelBadge({ level }: { level: LogEventSummary['level'] }) {
   if (level === 'error') {
@@ -16,6 +16,69 @@ function StatusBadge({ statusClass }: { statusClass: LogEventSummary['statusClas
   if (statusClass === '4xx') return <Badge variant="secondary">4xx</Badge>;
   if (statusClass === '5xx') return <Badge variant="destructive">5xx</Badge>;
   return <Badge variant="secondary">network</Badge>;
+}
+
+function formatMetric(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '-';
+  return Intl.NumberFormat(undefined, {
+    notation: Math.abs(value) >= 100_000 ? 'compact' : 'standard',
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '-';
+  return `${value.toFixed(2).replace(/\.?0+$/, '')}%`;
+}
+
+function usageTooltip(usage: TokenUsageSummary): string {
+  const rows: Array<[string, string]> = [
+    ['input', formatMetric(usage.inputTokens)],
+    ['output', formatMetric(usage.outputTokens)],
+    ['total', formatMetric(usage.totalTokens)],
+    ['cache hit rate', formatPercent(usage.cacheHitRate)],
+    ['cache hit input', formatMetric(usage.cacheHitInputTokens)],
+    ['cached input', formatMetric(usage.cachedInputTokens)],
+    ['cache read', formatMetric(usage.cacheReadInputTokens)],
+    ['cache creation', formatMetric(usage.cacheCreationInputTokens)],
+    ['cache creation 5m', formatMetric(usage.cacheCreationInputTokens5m)],
+    ['cache creation 1h', formatMetric(usage.cacheCreationInputTokens1h)],
+    ['cache write', formatMetric(usage.cacheWriteInputTokens)],
+    ['cache miss', formatMetric(usage.cacheMissInputTokens)],
+    ['reasoning', formatMetric(usage.reasoningTokens)],
+    ['audio input', formatMetric(usage.audioInputTokens)],
+    ['audio output', formatMetric(usage.audioOutputTokens)],
+    ['text input', formatMetric(usage.textInputTokens)],
+    ['text output', formatMetric(usage.textOutputTokens)],
+    ['accepted prediction', formatMetric(usage.acceptedPredictionTokens)],
+    ['rejected prediction', formatMetric(usage.rejectedPredictionTokens)],
+    ['tool prompt', formatMetric(usage.toolUsePromptTokens)],
+    ['billable input', formatMetric(usage.billableInputTokens)],
+    ['billable output', formatMetric(usage.billableOutputTokens)],
+    ['credit usage', formatMetric(usage.creditUsage)],
+    ['cost', formatMetric(usage.cost)],
+    ['style', usage.providerStyle],
+    ['source', usage.source],
+    ['path', usage.rawUsagePath ?? '-'],
+    ['formula', usage.cacheHitRateFormula ?? '-'],
+  ];
+  return rows.map(([label, value]) => `${label}: ${value}`).join('\n');
+}
+
+function TokenUsageCell({ usage }: { usage: TokenUsageSummary | null }) {
+  if (!usage) return <div className="text-xs text-muted-foreground">-</div>;
+  return (
+    <div className="min-w-[190px] text-xs leading-tight" title={usageTooltip(usage)}>
+      <div className="font-medium tabular-nums">
+        in {formatMetric(usage.inputTokens)} · out {formatMetric(usage.outputTokens)} · total{' '}
+        {formatMetric(usage.totalTokens)}
+      </div>
+      <div className="mt-0.5 text-muted-foreground tabular-nums">
+        cache {formatPercent(usage.cacheHitRate)} · hit {formatMetric(usage.cacheHitInputTokens)} ·
+        reason {formatMetric(usage.reasoningTokens)}
+      </div>
+    </div>
+  );
 }
 
 export function createLogsColumns(
@@ -91,6 +154,11 @@ export function createLogsColumns(
       accessorKey: 'latencyMs',
       header: '延迟',
       cell: ({ row }) => <div className="text-xs tabular-nums">{row.original.latencyMs} ms</div>,
+    },
+    {
+      accessorKey: 'tokenUsage',
+      header: 'Usage',
+      cell: ({ row }) => <TokenUsageCell usage={row.original.tokenUsage} />,
     },
     {
       accessorKey: 'statusClass',

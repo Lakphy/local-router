@@ -17,6 +17,7 @@ import {
 } from './log-index';
 import { publishLogEvent } from './log-tail';
 import type { PluginPhaseLog } from './plugin';
+import { enrichLogEventTokenUsage, type TokenUsageMetrics } from './token-usage';
 
 export interface LogEvent {
   request_id: string;
@@ -48,6 +49,8 @@ export interface LogEvent {
   request_body?: unknown;
   response_body?: string;
   stream_file?: string;
+  /** 统一提取后的 token/usage 指标。即使 bodyPolicy=off，也允许记录这类非正文指标。 */
+  token_usage?: TokenUsageMetrics;
   /** 流式日志实际落盘字节数；省略时表示未落盘或全部以 stream_bytes 字段表达。 */
   stream_file_bytes?: number;
   /** 流式日志因 maxBytesPerRequest 上限被截断时为 true。 */
@@ -137,12 +140,13 @@ class Logger {
   writeEvent(event: LogEvent): void {
     if (!this._enabled) return;
     try {
+      const enrichedEvent = enrichLogEventTokenUsage(event, { baseDir: this.baseDir });
       // 目录可能在测试或外部清理后被删除，这里做一次自愈。
       this.ensureDirs();
-      const dateStr = event.ts_start.slice(0, 10);
+      const dateStr = enrichedEvent.ts_start.slice(0, 10);
       const filePath = join(this.eventsDir, `${dateStr}.jsonl`);
       const offset = existsSync(filePath) ? statSync(filePath).size : 0;
-      const line = `${JSON.stringify(event)}\n`;
+      const line = `${JSON.stringify(enrichedEvent)}\n`;
       appendFileSync(filePath, line);
       const id = encodeOffsetLogEventId(dateStr, offset);
       enqueueLogEventForIndex({
@@ -151,9 +155,9 @@ class Logger {
         date: dateStr,
         offset,
         byteLength: Buffer.byteLength(line),
-        event,
+        event: enrichedEvent,
       });
-      publishLogEvent({ id, date: dateStr, filePath, offset, event });
+      publishLogEvent({ id, date: dateStr, filePath, offset, event: enrichedEvent });
     } catch (err) {
       console.error('[logger] 事件日志写入失败:', err);
     }
