@@ -10,8 +10,8 @@ interface MetaItemProps {
 
 export function MetaItem({ label, value, mono = false }: MetaItemProps) {
   return (
-    <div className="rounded-md border bg-muted/20 px-3 py-2">
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+    <div className="rounded-md border bg-muted/20 px-2.5 py-1.5">
+      <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
         <span>{label}</span>
         <Button
           type="button"
@@ -27,7 +27,7 @@ export function MetaItem({ label, value, mono = false }: MetaItemProps) {
           <Copy className="h-3 w-3" />
         </Button>
       </div>
-      <div className={`mt-1 break-all ${mono ? 'font-mono text-xs' : 'text-sm'}`}>{value}</div>
+      <div className={`mt-0.5 break-all ${mono ? 'font-mono text-xs' : 'text-xs'}`}>{value}</div>
     </div>
   );
 }

@@ -4,15 +4,7 @@ import {
   fetchLogEvents,
   type LogEventSummary,
   type LogEventsResponse,
-  openLogTail,
 } from '@/lib/api';
-
-export interface SavedLogView {
-  id: string;
-  name: string;
-  filters: LogFilters;
-  sort: 'time_desc' | 'time_asc';
-}
 
 export interface LogFilters {
   window: '1h' | '6h' | '24h';
@@ -41,13 +33,6 @@ interface LogsState {
   loading: boolean;
   loadingMore: boolean;
   error: string | null;
-  autoRefreshEnabled: boolean;
-  refreshIntervalSec: number;
-  savedViews: SavedLogView[];
-  tailEnabled: boolean;
-  tailConnected: boolean;
-  tailError: string | null;
-  refreshing: boolean;
 }
 
 interface LogsActions {
@@ -55,18 +40,8 @@ interface LogsActions {
   setSort: (sort: LogsState['sort']) => Promise<void>;
   applyFilters: () => Promise<void>;
   resetFilters: () => Promise<void>;
-  fetchFirstPage: (options?: { silent?: boolean }) => Promise<void>;
+  fetchFirstPage: () => Promise<void>;
   fetchNextPage: () => Promise<void>;
-  setAutoRefreshEnabled: (enabled: boolean) => void;
-  setRefreshIntervalSec: (seconds: number) => void;
-  startAutoRefresh: () => void;
-  stopAutoRefresh: () => void;
-  setTailEnabled: (enabled: boolean) => void;
-  startTail: () => void;
-  stopTail: () => void;
-  saveCurrentView: (name: string) => void;
-  applySavedView: (id: string) => Promise<void>;
-  deleteSavedView: (id: string) => void;
 }
 
 type LogsStore = LogsState & LogsActions;
@@ -87,8 +62,6 @@ const DEFAULT_FILTERS: LogFilters = {
   q: '',
 };
 
-let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
-let tailCleanup: (() => void) | null = null;
 let firstPageController: AbortController | null = null;
 let firstPageRequestSeq = 0;
 
@@ -146,13 +119,6 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
   loading: false,
   loadingMore: false,
   error: null,
-  autoRefreshEnabled: false,
-  refreshIntervalSec: 5,
-  savedViews: [],
-  tailEnabled: false,
-  tailConnected: false,
-  tailError: null,
-  refreshing: false,
 
   setFilter: (key, value) => {
     set((state) => ({
@@ -181,16 +147,14 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
     await get().fetchFirstPage();
   },
 
-  fetchFirstPage: async (options = {}) => {
+  fetchFirstPage: async () => {
     firstPageController?.abort();
     const controller = new AbortController();
     firstPageController = controller;
     const requestSeq = ++firstPageRequestSeq;
-    const silent = options.silent === true && get().items.length > 0;
 
     set({
-      loading: !silent,
-      refreshing: silent,
+      loading: true,
       error: null,
     });
 
@@ -204,18 +168,12 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
         stats: data.stats,
         meta: data.meta,
         loading: false,
-        refreshing: false,
         loadingMore: false,
       });
-
-      if (get().tailEnabled) {
-        get().startTail();
-      }
     } catch (err) {
       if (isAbortError(err) || requestSeq !== firstPageRequestSeq) return;
       set({
         loading: false,
-        refreshing: false,
         loadingMore: false,
         error: err instanceof Error ? err.message : '日志查询失败',
       });
@@ -249,125 +207,5 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
         error: err instanceof Error ? err.message : '加载更多日志失败',
       });
     }
-  },
-
-  setAutoRefreshEnabled: (enabled) => {
-    set({ autoRefreshEnabled: enabled });
-    if (enabled) get().startAutoRefresh();
-    else get().stopAutoRefresh();
-  },
-
-  setRefreshIntervalSec: (seconds) => {
-    const value = Math.max(2, Math.min(60, seconds));
-    set({ refreshIntervalSec: value });
-    if (get().autoRefreshEnabled) {
-      get().startAutoRefresh();
-    }
-  },
-
-  startAutoRefresh: () => {
-    if (autoRefreshTimer) {
-      clearInterval(autoRefreshTimer);
-      autoRefreshTimer = null;
-    }
-
-    const interval = Math.max(2, get().refreshIntervalSec) * 1000;
-    autoRefreshTimer = setInterval(() => {
-      void get().fetchFirstPage({ silent: true });
-    }, interval);
-  },
-
-  stopAutoRefresh: () => {
-    if (autoRefreshTimer) {
-      clearInterval(autoRefreshTimer);
-      autoRefreshTimer = null;
-    }
-  },
-
-  setTailEnabled: (enabled) => {
-    set({ tailEnabled: enabled });
-    if (enabled) get().startTail();
-    else get().stopTail();
-  },
-
-  startTail: () => {
-    if (tailCleanup) {
-      tailCleanup();
-      tailCleanup = null;
-    }
-
-    const state = get();
-    tailCleanup = openLogTail(
-      {
-        window: state.filters.window,
-        levels: state.filters.levels,
-        provider: state.filters.provider || undefined,
-        routeType: state.filters.routeType || undefined,
-        modelIn: state.filters.modelIn || undefined,
-        modelOut: state.filters.modelOut || undefined,
-        user: state.filters.user || undefined,
-        session: state.filters.session || undefined,
-        statusClass: state.filters.statusClass,
-        hasError: state.filters.hasError === 'all' ? undefined : state.filters.hasError === 'true',
-        q: state.filters.q || undefined,
-        sort: state.sort,
-      },
-      {
-        onReady: () => {
-          set({ tailConnected: true, tailError: null });
-        },
-        onEvents: (data) => {
-          set((current) => ({
-            tailConnected: true,
-            items: mergeUniqueById(current.items, data.items, current.sort),
-            stats: data.meta.statsMode === 'none' ? current.stats : data.stats,
-            meta: data.meta,
-            tailError: data.meta.fallbackReason ?? null,
-          }));
-        },
-        onError: (message) => {
-          set({ tailConnected: false, tailError: message });
-        },
-      }
-    );
-  },
-
-  stopTail: () => {
-    if (tailCleanup) {
-      tailCleanup();
-      tailCleanup = null;
-    }
-    set({ tailConnected: false, tailError: null });
-  },
-
-  saveCurrentView: (name) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-
-    const state = get();
-    const view: SavedLogView = {
-      id: crypto.randomUUID(),
-      name: trimmed,
-      filters: { ...state.filters },
-      sort: state.sort,
-    };
-
-    set((current) => ({
-      savedViews: [view, ...current.savedViews].slice(0, 20),
-    }));
-  },
-
-  applySavedView: async (id) => {
-    const view = get().savedViews.find((item) => item.id === id);
-    if (!view) return;
-
-    set({ filters: { ...view.filters }, sort: view.sort });
-    await get().fetchFirstPage();
-  },
-
-  deleteSavedView: (id) => {
-    set((state) => ({
-      savedViews: state.savedViews.filter((view) => view.id !== id),
-    }));
   },
 }));

@@ -195,7 +195,7 @@ export function LogDetailPage() {
   ];
 
   return (
-    <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
+    <Tabs value={activeTab} onValueChange={handleTabChange} className="min-w-[720px] space-y-3">
       <DetailHeader
         detail={detail}
         interfaceType={interfaceType}
@@ -203,7 +203,7 @@ export function LogDetailPage() {
         onBack={() => navigate({ to: '/logs', search: { user: undefined, session: undefined } })}
       />
 
-      <main className="min-w-0 space-y-4">
+      <main className="min-w-0 space-y-3">
         <TabsContent value="overview" className="mt-0">
           <OverviewSection detail={detail} interfaceType={interfaceType} />
         </TabsContent>
@@ -303,11 +303,11 @@ function DetailHeader({
   onBack: () => void;
 }) {
   return (
-    <section className="overflow-hidden rounded-lg border bg-background">
-      <div className="space-y-3 px-3 py-3">
-        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <Button variant="outline" size="sm" onClick={onBack} className="mt-0.5">
+    <section className="overflow-hidden rounded-md border bg-background">
+      <div className="space-y-2 px-3 py-2">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-2">
+            <Button variant="outline" size="xs" onClick={onBack} className="mt-0.5">
               <ArrowLeft className="h-4 w-4" />
               返回
             </Button>
@@ -318,7 +318,7 @@ function DetailHeader({
                 </Badge>
                 {detail.upstream.isStream ? <Badge variant="outline">stream</Badge> : null}
               </div>
-              <h1 className="mt-1 flex min-w-0 items-center gap-2 text-base font-semibold">
+              <h1 className="mt-1 flex min-w-0 items-center gap-2 text-sm font-semibold">
                 <span className="shrink-0 rounded-md border bg-muted/30 px-1.5 py-0.5 font-mono text-xs">
                   {detail.request.method}
                 </span>
@@ -335,7 +335,7 @@ function DetailHeader({
           </div>
         </div>
 
-        <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_240px]">
+        <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_220px]">
           <HeaderRouteSummary detail={detail} interfaceType={interfaceType} />
           <div className="grid grid-cols-2 gap-2 text-xs">
             <HeaderMetric label="HTTP" value={String(detail.summary.upstreamStatus)} />
@@ -343,13 +343,13 @@ function DetailHeader({
           </div>
         </div>
       </div>
-      <div className="overflow-x-auto border-t px-3 py-2">
+      <div className="overflow-x-auto border-t px-3 py-1.5">
         <TabsList variant="line" className="h-auto min-w-max justify-start">
           {tabs.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id} className="gap-2 px-3 py-2">
+            <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5 px-2.5 py-1.5 text-xs">
               <span>{tab.label}</span>
               {tab.meta ? (
-                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground">
                   {tab.meta}
                 </span>
               ) : null}
@@ -369,7 +369,7 @@ function HeaderRouteSummary({
   interfaceType: string;
 }) {
   return (
-    <div className="min-w-0 rounded-md border bg-muted/15 px-3 py-2">
+    <div className="min-w-0 rounded-md border bg-muted/15 px-2.5 py-1.5">
       <div className="text-[11px] text-muted-foreground">Route</div>
       <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-sm">
         <HeaderPill value={detail.summary.modelIn} mono />
@@ -404,7 +404,7 @@ function HeaderPill({ value, mono, subtle }: { value: string; mono?: boolean; su
 
 function HeaderMetric({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="min-w-0 rounded-md border bg-muted/15 px-2.5 py-2">
+    <div className="min-w-0 rounded-md border bg-muted/15 px-2.5 py-1.5">
       <div className="text-[11px] text-muted-foreground">{label}</div>
       <div
         className={cn('mt-0.5 truncate text-sm font-medium', mono ? 'font-mono' : 'tabular-nums')}
@@ -432,8 +432,8 @@ function OverviewSection({
         detail.usage.tokenUsage ? detail.usage.tokenUsage.source : 'unavailable',
       ]}
     >
-      <div className="space-y-3">
-        <div className="flex flex-wrap gap-2">
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap gap-1.5">
           <Badge variant="outline">{detail.summary.level}</Badge>
           <Badge variant="outline">{detail.summary.provider}</Badge>
           <Badge variant="outline">{detail.summary.routeType}</Badge>
@@ -455,7 +455,7 @@ function OverviewSection({
           <MetaItem label="定位" value={`${detail.location.file}:${detail.location.line}`} mono />
         </div>
 
-        <div className="rounded-md border bg-muted/10 p-3">
+        <div className="rounded-md border bg-muted/10 p-2">
           <RouteFlowCard
             interfaceType={interfaceType}
             routeType={detail.summary.routeType}
@@ -486,9 +486,9 @@ function DetailSection({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border bg-background">
+    <section className="rounded-md border bg-background">
       <SectionHeading title={title} description={description} badges={badges} />
-      <div className="px-3 py-3">{children}</div>
+      <div className="px-3 py-2.5">{children}</div>
     </section>
   );
 }
@@ -505,7 +505,7 @@ function SectionGroup({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-3">
+    <section className="space-y-2.5">
       <SectionHeading title={title} description={description} badges={badges} bare />
       {children}
     </section>
@@ -526,13 +526,13 @@ function SectionHeading({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-start justify-between gap-2 px-3 py-3',
-        bare ? 'rounded-lg border bg-background' : 'border-b'
+        'flex flex-wrap items-start justify-between gap-2 px-3 py-2',
+        bare ? 'rounded-md border bg-background' : 'border-b'
       )}
     >
       <div className="min-w-0">
-        <h3 className="text-base font-semibold">{title}</h3>
-        {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
       </div>
       {badges && badges.length > 0 ? (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -579,13 +579,13 @@ function LazyTabsContent({
       {mounted ? (
         children
       ) : (
-        <div className="rounded-lg border border-dashed bg-background px-3 py-5">
+        <div className="rounded-md border border-dashed bg-background px-3 py-4">
           <div className="text-sm text-muted-foreground">{placeholder}</div>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="mt-3"
+            className="mt-2"
             onClick={() => onMount(value)}
           >
             查看本 Tab 内容
@@ -610,13 +610,13 @@ function RequestCompareSection({ detail }: { detail: LogEventDetail }) {
   const providerRequestUrl = detail.plugins?.requestUrlAfterPlugins ?? detail.upstream.targetUrl;
 
   return (
-    <div className="grid gap-3 xl:grid-cols-2">
+    <div className="grid gap-2.5 xl:grid-cols-2">
       <ComparePanel
         title="用户请求"
         description="进入 local-router 的请求视图"
         source="reconstructed"
       >
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <div className="grid gap-2 text-sm sm:grid-cols-3">
             <MetaItem label="method" value={detail.request.method} />
             <MetaItem label="path" value={detail.request.path} mono />
@@ -637,7 +637,7 @@ function RequestCompareSection({ detail }: { detail: LogEventDetail }) {
         description={`最终发送给 ${detail.summary.provider} 的请求视图`}
         source={hasRequestBodyAfterPlugins ? 'plugin-after' : 'captured'}
       >
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <MetaItem label="target_url" value={providerRequestUrl} mono />
             <MetaItem label="provider" value={detail.summary.provider} />
@@ -672,13 +672,13 @@ function ResponseCompareSection({ detail }: { detail: LogEventDetail }) {
     : detail.response.responseBody;
 
   return (
-    <div className="grid gap-3 xl:grid-cols-2">
+    <div className="grid gap-2.5 xl:grid-cols-2">
       <ComparePanel
         title="Provider 响应"
         description={`${detail.summary.provider} 返回给 local-router 的响应视图`}
         source={hasResponseBodyBeforePlugins ? 'plugin-before' : 'captured'}
       >
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <MetaItem label="upstream_status" value={String(detail.response.upstreamStatus)} />
             <MetaItem label="content-type" value={detail.response.contentType ?? '-'} mono />
@@ -702,7 +702,7 @@ function ResponseCompareSection({ detail }: { detail: LogEventDetail }) {
         description="local-router 返回给用户的响应视图"
         source={hasResponseBodyAfterPlugins ? 'plugin-after' : 'captured'}
       >
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <MetaItem label="status" value={String(detail.response.upstreamStatus)} />
             <MetaItem label="content-type" value={detail.response.contentType ?? '-'} mono />
@@ -742,22 +742,22 @@ function ComparePanel({
   children: ReactNode;
 }) {
   return (
-    <section className="min-w-0 rounded-lg border bg-background">
-      <div className="flex flex-wrap items-start justify-between gap-2 border-b px-3 py-3">
+    <section className="min-w-0 rounded-md border bg-background">
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b px-3 py-2">
         <div className="min-w-0">
           <h4 className="text-sm font-semibold">{title}</h4>
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
         <SourceBadge value={source} />
       </div>
-      <div className="px-3 py-3">{children}</div>
+      <div className="px-3 py-2.5">{children}</div>
     </section>
   );
 }
 
 function SnapshotNote({ text }: { text: string }) {
   return (
-    <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+    <div className="rounded-md border bg-muted/20 px-2.5 py-1.5 text-xs text-muted-foreground">
       {text}
     </div>
   );
@@ -765,7 +765,7 @@ function SnapshotNote({ text }: { text: string }) {
 
 function StreamViewer({ detail }: { detail: LogEventDetail }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
         <MetaItem label="is_stream" value={detail.upstream.isStream ? 'true' : 'false'} />
         <MetaItem label="stream_file" value={detail.upstream.streamFile ?? '无 stream 数据'} mono />
@@ -792,9 +792,9 @@ function OverviewContext({ detail }: { detail: LogEventDetail }) {
   const hasResponseBodyBeforePlugins = detail.plugins?.responseBodyBeforePlugins !== undefined;
 
   return (
-    <div className="space-y-2 border-t pt-3">
-      <div className="text-sm font-semibold">日志上下文</div>
-      <div className="grid gap-3 lg:grid-cols-3">
+    <div className="space-y-2 border-t pt-2.5">
+      <div className="text-xs font-semibold">日志上下文</div>
+      <div className="grid gap-2 lg:grid-cols-3">
         <ContextPanel title="Capture">
           <ContextRow label="bodyPolicy" value={detail.capture.bodyPolicy} mono />
           <ContextRow
@@ -853,8 +853,8 @@ function OverviewContext({ detail }: { detail: LogEventDetail }) {
 function ContextPanel({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-md border bg-muted/10">
-      <div className="border-b px-3 py-2 text-xs font-semibold">{title}</div>
-      <div className="grid gap-2 px-3 py-3 sm:grid-cols-2">{children}</div>
+      <div className="border-b px-2.5 py-1.5 text-xs font-semibold">{title}</div>
+      <div className="grid gap-2 px-2.5 py-2.5 sm:grid-cols-2">{children}</div>
     </section>
   );
 }
@@ -894,13 +894,13 @@ function CaptureMatrix({ detail }: { detail: LogEventDetail }) {
   ];
 
   return (
-    <div className="space-y-2 border-t pt-3">
-      <div className="text-sm font-semibold">采集范围</div>
+    <div className="space-y-2 border-t pt-2.5">
+      <div className="text-xs font-semibold">采集范围</div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {items.map((item) => (
-          <div key={item.label} className="rounded-md border bg-muted/10 px-3 py-2">
+          <div key={item.label} className="rounded-md border bg-muted/10 px-2.5 py-1.5">
             <div className="text-xs text-muted-foreground">{item.label}</div>
-            <div className="mt-1 text-sm font-medium">{item.value}</div>
+            <div className="mt-0.5 text-xs font-medium">{item.value}</div>
           </div>
         ))}
       </div>
@@ -910,7 +910,7 @@ function CaptureMatrix({ detail }: { detail: LogEventDetail }) {
 
 function EmptyPanel({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-lg border border-dashed bg-background px-3 py-5">
+    <div className="rounded-md border border-dashed bg-background px-3 py-4">
       <div className="text-sm font-medium">{title}</div>
       <div className="mt-1 text-sm text-muted-foreground">{description}</div>
     </div>
@@ -977,10 +977,10 @@ function UsageSizeSection({ detail }: { detail: LogEventDetail }) {
   const usage = detail.usage.tokenUsage ?? detail.summary.tokenUsage;
   const rows = usageRows(usage);
   return (
-    <div className="space-y-3 border-t pt-3">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <div className="space-y-2.5 border-t pt-2.5">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-semibold">Usage / Size</div>
+          <div className="text-xs font-semibold">Usage / Size</div>
           <div className="text-xs text-muted-foreground">Token 用量与请求/响应体积</div>
         </div>
         {usage ? <Badge variant="outline">{usage.providerStyle}</Badge> : null}
@@ -1006,7 +1006,7 @@ function UsageSizeSection({ detail }: { detail: LogEventDetail }) {
       </div>
 
       {rows.length > 0 ? (
-        <div className="grid gap-x-4 gap-y-1 border-t pt-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-x-4 gap-y-1 border-t pt-2.5 text-xs sm:grid-cols-2 lg:grid-cols-3">
           {rows.map(([label, value]) => (
             <div key={label} className="flex min-w-0 justify-between gap-3">
               <span className="shrink-0 text-muted-foreground">{label}</span>
@@ -1017,7 +1017,7 @@ function UsageSizeSection({ detail }: { detail: LogEventDetail }) {
           ))}
         </div>
       ) : (
-        <div className="border-t pt-3 text-xs text-muted-foreground">
+        <div className="border-t pt-2.5 text-xs text-muted-foreground">
           本条日志未包含 provider usage 字段。
         </div>
       )}
@@ -1027,9 +1027,9 @@ function UsageSizeSection({ detail }: { detail: LogEventDetail }) {
 
 function MetricTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border bg-background px-3 py-2">
+    <div className="rounded-md border bg-background px-2.5 py-1.5">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 text-base font-semibold tabular-nums">{value}</div>
+      <div className="mt-0.5 text-sm font-semibold tabular-nums">{value}</div>
     </div>
   );
 }

@@ -19,8 +19,8 @@ import type {
 } from '@/lib/log-chat-history/types';
 import { cn } from '@/lib/utils';
 
-const ROW_HEIGHT = 78;
-const VIEWPORT_HEIGHT = 620;
+const ROW_HEIGHT = 68;
+const VIEWPORT_HEIGHT = 560;
 const OVERSCAN_ROWS = 8;
 
 type MessageSortOrder = 'asc' | 'desc';
@@ -122,6 +122,14 @@ function sourceLabel(source: NormalizedChatMessage['source']): string {
   return '流式';
 }
 
+function ChatStatBadge({ label, value }: { label: string; value: number | string }) {
+  return (
+    <span className="rounded-full border bg-muted/20 px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground">
+      {label}: {value}
+    </span>
+  );
+}
+
 function blockTypeLabel(type: NormalizedContentBlock['type']): string {
   if (type === 'text') return '文本';
   if (type === 'thinking') return '思考';
@@ -192,31 +200,9 @@ export function ChatHistorySplitViewer({ parsed }: { parsed: ParsedChatHistory }
   );
 
   return (
-    <section className="rounded-lg border bg-background">
-      <div className="border-b px-3 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h3 className="text-base font-semibold">Chat History</h3>
-            <p className="text-sm text-muted-foreground">左侧列表虚拟渲染，右侧查看选中消息内容</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge variant="outline">derived</Badge>
-            <Badge variant="outline">messages: {parsed.messages.length}</Badge>
-            <Badge variant="outline">input: {parsed.stats.inputCount}</Badge>
-            <Badge variant="outline">output: {parsed.stats.outputCount}</Badge>
-            {parsed.stats.streamEventCount > 0 ? (
-              <Badge variant="outline">stream: {parsed.stats.streamEventCount}</Badge>
-            ) : null}
-            {parsed.stats.streamPartial ? <Badge variant="secondary">partial</Badge> : null}
-            {parsed.warnings.length > 0 ? (
-              <Badge variant="secondary">warnings: {parsed.warnings.length}</Badge>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
+    <section className="overflow-hidden rounded-md border bg-background">
       {parsed.warnings.length > 0 ? (
-        <div className="border-b px-3 py-2">
+        <div className="border-b bg-muted/10 px-2.5 py-1.5">
           <div className="flex flex-wrap gap-1.5">
             {parsed.warnings.map((warning) => (
               <span
@@ -231,19 +217,27 @@ export function ChatHistorySplitViewer({ parsed }: { parsed: ParsedChatHistory }
       ) : null}
 
       {parsed.messages.length === 0 ? (
-        <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+        <div className="px-3 py-6 text-center text-sm text-muted-foreground">
           无可还原的消息历史。
         </div>
       ) : (
-        <div className="grid min-h-0 gap-0 lg:grid-cols-[380px_minmax(0,1fr)]">
+        <div className="grid min-h-0 gap-0 lg:grid-cols-[360px_minmax(0,1fr)]">
           <div className="border-b lg:border-r lg:border-b-0">
-            <div className="flex min-h-12 items-center justify-between gap-2 border-b px-3 py-2 text-xs">
-              <div className="min-w-0">
-                <div className="font-medium text-foreground">Messages</div>
-                <div className="mt-0.5 text-muted-foreground">
-                  {sortOrder === 'asc' ? '时间正序' : '时间倒序'} · #{selectedIndex + 1} /{' '}
-                  {parsed.messages.length}
-                </div>
+            <div className="flex min-h-10 items-center justify-between gap-2 border-b px-2.5 py-1.5 text-xs">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <span className="font-medium text-foreground">Messages</span>
+                <span className="text-muted-foreground">
+                  #{selectedIndex + 1}/{parsed.messages.length}
+                </span>
+                <ChatStatBadge label="in" value={parsed.stats.inputCount} />
+                <ChatStatBadge label="out" value={parsed.stats.outputCount} />
+                {parsed.stats.streamEventCount > 0 ? (
+                  <ChatStatBadge label="stream" value={parsed.stats.streamEventCount} />
+                ) : null}
+                {parsed.stats.streamPartial ? <Badge variant="secondary">partial</Badge> : null}
+                {parsed.warnings.length > 0 ? (
+                  <Badge variant="secondary">warnings: {parsed.warnings.length}</Badge>
+                ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <Button
@@ -283,7 +277,7 @@ export function ChatHistorySplitViewer({ parsed }: { parsed: ParsedChatHistory }
             </div>
             <div
               ref={viewportRef}
-              className="h-[620px] overflow-auto"
+              className="h-[560px] overflow-auto"
               onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
             >
               <div className="relative" style={{ height: parsed.messages.length * ROW_HEIGHT }}>
@@ -331,7 +325,7 @@ function MessageListRow({
       type="button"
       onClick={onSelect}
       className={cn(
-        'absolute left-0 flex w-full items-stretch gap-2 border-b px-3 py-2 text-left transition-colors',
+        'absolute left-0 flex w-full items-stretch gap-1.5 border-b px-2.5 py-1.5 text-left transition-colors',
         selected ? 'bg-primary/8 ring-1 ring-primary/20' : 'hover:bg-muted/50'
       )}
       style={{ top: position * ROW_HEIGHT, height: ROW_HEIGHT }}
@@ -360,14 +354,14 @@ function MessageListRow({
           </span>
         </span>
         <span
-          className="mt-1.5 block overflow-hidden text-xs leading-snug text-foreground/90"
+          className="mt-1 block overflow-hidden text-xs leading-snug text-foreground/90"
           style={{
             display: '-webkit-box',
             WebkitBoxOrient: 'vertical',
             WebkitLineClamp: 2,
           }}
         >
-          {truncateText(messagePreview(message), 150)}
+          {truncateText(messagePreview(message), 130)}
         </span>
       </span>
     </button>
@@ -385,7 +379,7 @@ function MessageDetail({
 
   if (!message) {
     return (
-      <div className="flex h-[620px] items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-[560px] items-center justify-center text-sm text-muted-foreground">
         选择左侧消息查看内容。
       </div>
     );
@@ -400,8 +394,8 @@ function MessageDetail({
 
   return (
     <Tabs value={mode} onValueChange={(value) => setMode(value as MessageDetailMode)}>
-      <div className="h-[620px] overflow-auto">
-        <div className={cn('border-b px-3 py-3', roleClassName(message.role))}>
+      <div className="h-[560px] overflow-auto">
+        <div className={cn('border-b px-2.5 py-2', roleClassName(message.role))}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <Badge variant="outline">#{index + 1}</Badge>
@@ -436,10 +430,10 @@ function MessageDetail({
           </div>
         </div>
 
-        <TabsContent value="json" className="mt-0 pt-3">
+        <TabsContent value="json" className="mt-0 pt-2">
           <CopyablePre text={jsonText} copyLabel="message JSON" />
         </TabsContent>
-        <TabsContent value="visual" className="mt-0 space-y-2 px-3 py-3">
+        <TabsContent value="visual" className="mt-0 space-y-2 px-2.5 py-2.5">
           {message.blocks.length > 0 ? (
             message.blocks.map((block, blockIndex) => (
               <MessageBlockDisclosure key={blockKey(block)} block={block} index={blockIndex} />
@@ -472,7 +466,7 @@ function MessageBlockDisclosure({
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+            className="flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left"
           >
             <span className="min-w-0">
               <span className="flex items-center gap-1.5">
@@ -481,7 +475,7 @@ function MessageBlockDisclosure({
                 </Badge>
                 <span className="text-sm font-medium">{label}</span>
               </span>
-              <span className="mt-1 block truncate text-xs text-muted-foreground">
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                 {truncateText(content, 140)}
               </span>
             </span>
@@ -507,7 +501,7 @@ function BlockContent({ block, label }: { block: NormalizedContentBlock; label: 
 
   if (block.type === 'thinking') {
     return (
-      <div className="space-y-2 px-3 pb-3">
+      <div className="space-y-2 px-2.5 pb-2.5">
         <CopyablePre text={block.thinking || '(empty thinking)'} copyLabel={label} />
         {block.signature ? (
           <CopyablePre text={block.signature} copyLabel="thinking signature" />
@@ -518,7 +512,7 @@ function BlockContent({ block, label }: { block: NormalizedContentBlock; label: 
 
   if (block.type === 'tool_use') {
     return (
-      <div className="space-y-2 px-3 pb-3">
+      <div className="space-y-2 px-2.5 pb-2.5">
         <div className="grid gap-2 text-xs sm:grid-cols-2">
           <div>id: {block.id ?? '-'}</div>
           <div>name: {block.name ?? '-'}</div>
@@ -535,7 +529,7 @@ function BlockContent({ block, label }: { block: NormalizedContentBlock; label: 
 
   if (block.type === 'tool_result') {
     return (
-      <div className="space-y-2 px-3 pb-3">
+      <div className="space-y-2 px-2.5 pb-2.5">
         <div className="grid gap-2 text-xs sm:grid-cols-2">
           <div>tool_use_id: {block.toolUseId ?? '-'}</div>
           <div>is_error: {block.isError ? 'true' : 'false'}</div>
@@ -547,7 +541,7 @@ function BlockContent({ block, label }: { block: NormalizedContentBlock; label: 
 
   if (block.type === 'image') {
     return (
-      <div className="space-y-2 px-3 pb-3 text-xs">
+      <div className="space-y-2 px-2.5 pb-2.5 text-xs">
         <div>url: {block.url ?? '-'}</div>
         <div>mime: {block.mimeType ?? '-'}</div>
         <div>detail: {block.detail ?? '-'}</div>
@@ -561,7 +555,7 @@ function BlockContent({ block, label }: { block: NormalizedContentBlock; label: 
 
 function CopyablePre({ text, copyLabel }: { text: string; copyLabel: string }) {
   return (
-    <div className="relative px-3 pb-3">
+    <div className="relative px-2.5 pb-2.5">
       <Button
         type="button"
         size="icon-xs"

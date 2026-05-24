@@ -2,13 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { LogEventSummary, LogEventsResponse } from '../../web/src/lib/api';
 import { useLogsStore } from '../../web/src/stores/logs-store';
 
-type MutableGlobal = typeof globalThis & {
-  EventSource?: typeof EventSource;
-};
-
-const globalRef = globalThis as MutableGlobal;
 const originalFetch = globalThis.fetch;
-const originalEventSource = globalRef.EventSource;
 
 function createSummary(
   id: string,
@@ -88,52 +82,18 @@ function jsonResponse(body: unknown): Response {
   });
 }
 
-class FakeEventSource {
-  static instances: FakeEventSource[] = [];
-
-  url: string;
-  onerror: (() => void) | null = null;
-  closed = false;
-  private readonly listeners = new Map<string, EventListener[]>();
-
-  constructor(url: string | URL) {
-    this.url = String(url);
-    FakeEventSource.instances.push(this);
-  }
-
-  addEventListener(type: string, listener: EventListener): void {
-    const listeners = this.listeners.get(type) ?? [];
-    listeners.push(listener);
-    this.listeners.set(type, listeners);
-  }
-
-  emit(type: string, data?: string): void {
-    for (const listener of this.listeners.get(type) ?? []) {
-      listener({ data } as MessageEvent);
-    }
-  }
-
-  close(): void {
-    this.closed = true;
-  }
-}
-
 function resetStore(): void {
-  useLogsStore.getState().stopAutoRefresh();
-  useLogsStore.getState().stopTail();
   useLogsStore.setState(useLogsStore.getInitialState(), true);
 }
 
 describe('logs store', () => {
   beforeEach(() => {
-    FakeEventSource.instances = [];
     resetStore();
   });
 
   afterEach(() => {
     resetStore();
     globalThis.fetch = originalFetch;
-    globalRef.EventSource = originalEventSource;
   });
 
   test('fetchFirstPage 应用当前过滤条件并保存首屏查询结果', async () => {
@@ -195,7 +155,6 @@ describe('logs store', () => {
     expect(url.searchParams.get('q')).toBe('timeout');
     expect(calls[0]?.signal).toBeInstanceOf(AbortSignal);
     expect(state.loading).toBe(false);
-    expect(state.refreshing).toBe(false);
     expect(state.items.map((item) => item.id)).toEqual(['log-2']);
     expect(state.nextCursor).toBe('cursor-1');
     expect(state.hasMore).toBe(true);
@@ -239,7 +198,6 @@ describe('logs store', () => {
     expect(requests[0]?.signal?.aborted).toBe(true);
     expect(state.items.map((item) => item.id)).toEqual(['new-log']);
     expect(state.loading).toBe(false);
-    expect(state.refreshing).toBe(false);
   });
 
   test('fetchNextPage 应使用 cursor 翻页、按时间合并去重并更新分页状态', async () => {
@@ -296,63 +254,5 @@ describe('logs store', () => {
     await useLogsStore.getState().fetchNextPage();
 
     expect(callCount).toBe(0);
-  });
-
-  test('tail 事件应合并到当前列表并暴露连接状态', () => {
-    globalRef.EventSource = FakeEventSource as unknown as typeof EventSource;
-
-    useLogsStore.setState({
-      items: [createSummary('log-1', '2026-03-16T10:00:01.000Z')],
-      sort: 'time_desc',
-    });
-
-    useLogsStore.getState().startTail();
-    const source = FakeEventSource.instances[0];
-
-    source?.emit('ready');
-    source?.emit(
-      'events',
-      JSON.stringify(
-        createEventsResponse({
-          items: [
-            createSummary('log-2', '2026-03-16T10:00:02.000Z'),
-            createSummary('log-1', '2026-03-16T10:00:01.000Z', { message: 'tail refresh' }),
-          ],
-          stats: {
-            total: 2,
-            errorCount: 0,
-            errorRate: 0,
-            avgLatencyMs: 100,
-            p95LatencyMs: 100,
-            tokenUsageCount: 0,
-            inputTokens: 0,
-            outputTokens: 0,
-            totalTokens: 0,
-            cachedInputTokens: 0,
-            cacheHitInputTokens: 0,
-            cacheHitRate: 0,
-            cacheHitRateDenominatorTokens: 0,
-            cacheReadInputTokens: 0,
-            cacheCreationInputTokens: 0,
-            cacheWriteInputTokens: 0,
-            cacheMissInputTokens: 0,
-            reasoningTokens: 0,
-            billableInputTokens: 0,
-            billableOutputTokens: 0,
-          },
-        })
-      )
-    );
-
-    const state = useLogsStore.getState();
-    expect(source?.url).toBe('/api/logs/tail?window=24h&sort=time_desc');
-    expect(state.tailConnected).toBe(true);
-    expect(state.items.map((item) => item.id)).toEqual(['log-2', 'log-1']);
-    expect(state.items.find((item) => item.id === 'log-1')?.message).toBe('tail refresh');
-    expect(state.stats?.total).toBe(2);
-
-    useLogsStore.getState().stopTail();
-    expect(source?.closed).toBe(true);
-    expect(useLogsStore.getState().tailConnected).toBe(false);
   });
 });
