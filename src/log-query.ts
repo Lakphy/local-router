@@ -4,7 +4,7 @@ import { createInterface } from 'node:readline';
 import type { LogConfig, ProviderType } from './config';
 import { resolveLogBaseDir } from './config';
 import { getIndexedLogEventDetail, queryIndexedLogEvents } from './log-index';
-import { resolveLogSessionIdentity } from './log-session-identity';
+import { type LogSessionIdentity, resolveLogSessionIdentity } from './log-session-identity';
 import type { LogEvent } from './logger';
 import { extractTokenUsageSummaryFromLogEvent, type TokenUsageSummary } from './token-usage';
 
@@ -33,6 +33,7 @@ interface LocatedLogEvent {
   level: LogLevel;
   statusClass: StatusClass;
   event: LogEvent;
+  identity?: LogSessionIdentity;
   tokenUsage: TokenUsageSummary | null;
 }
 
@@ -197,6 +198,18 @@ export interface LogQueryParams {
   cursor: string | null;
 }
 
+export interface LogEventFacts {
+  event: LogEvent;
+  ts: number;
+  level: LogLevel;
+  statusClass: StatusClass;
+  model: string;
+  identity: LogSessionIdentity;
+  hasError: boolean;
+  keywordText: string;
+  tokenUsage: TokenUsageSummary | null;
+}
+
 export interface NormalizedLogQueryInput {
   fromMs: number;
   toMs: number;
@@ -309,11 +322,8 @@ function buildMessage(event: LogEvent): string {
   return `${event.method} ${event.path} -> ${status}`;
 }
 
-function containsKeyword(event: LogEvent, q: string): boolean {
-  if (!q) return true;
-  const identity = resolveLogSessionIdentity(event.request_body);
-  const keyword = q.toLowerCase();
-  const haystack = [
+function buildKeywordText(event: LogEvent, identity: LogSessionIdentity): string {
+  return [
     event.request_id,
     event.path,
     event.provider,
@@ -329,7 +339,13 @@ function containsKeyword(event: LogEvent, q: string): boolean {
   ]
     .join(' ')
     .toLowerCase();
-  return haystack.includes(keyword);
+}
+
+function containsKeyword(event: LogEvent, q: string): boolean {
+  if (!q) return true;
+  const identity = resolveLogSessionIdentity(event.request_body);
+  const keyword = q.toLowerCase();
+  return buildKeywordText(event, identity).includes(keyword);
 }
 
 interface RunningStats {
@@ -554,7 +570,7 @@ function normalizeQuery(
 
 function eventToSummary(item: LocatedLogEvent): LogEventSummary {
   const { event } = item;
-  const identity = resolveLogSessionIdentity(event.request_body);
+  const identity = item.identity ?? resolveLogSessionIdentity(event.request_body);
   return {
     id: item.id,
     ts: event.ts_start,
@@ -580,21 +596,86 @@ function eventToSummary(item: LocatedLogEvent): LogEventSummary {
   };
 }
 
-export function createLogEventSummaryFromEvent(
-  event: LogEvent,
+export function extractLogEventFacts(event: LogEvent): LogEventFacts {
+  const ts = Date.parse(event.ts_start);
+  const level = getLevel(event);
+  const statusClass = getStatusClass(event);
+  const identity = resolveLogSessionIdentity(event.request_body);
+  return {
+    event,
+    ts: Number.isFinite(ts) ? ts : Number.NaN,
+    level,
+    statusClass,
+    model: event.model_out || event.model_in,
+    identity,
+    hasError: level === 'error',
+    keywordText: buildKeywordText(event, identity),
+    tokenUsage: extractTokenUsageSummaryFromLogEvent(event),
+  };
+}
+
+export function logEventFactsMatchQuery(facts: LogEventFacts, query: LogQueryParams): boolean {
+  if (!facts.event.ts_start) return false;
+  if (!Number.isFinite(facts.ts) || facts.ts < query.fromMs || facts.ts > query.toMs) return false;
+
+  if (query.levels.length > 0 && !query.levels.includes(facts.level)) return false;
+  if (query.providers.length > 0 && !query.providers.includes(facts.event.provider)) return false;
+  if (query.routeTypes.length > 0 && !query.routeTypes.includes(facts.event.route_type)) {
+    return false;
+  }
+
+  if (query.models.length > 0 && !query.models.includes(facts.model)) return false;
+  if (query.modelIns.length > 0 && !query.modelIns.includes(facts.event.model_in)) return false;
+  if (query.modelOuts.length > 0 && !query.modelOuts.includes(facts.event.model_out)) {
+    return false;
+  }
+
+  if (query.users.length > 0) {
+    const matchedByRaw = facts.identity.userIdRaw
+      ? query.users.includes(facts.identity.userIdRaw)
+      : false;
+    const matchedByUserKey = facts.identity.userKey
+      ? query.users.includes(facts.identity.userKey)
+      : false;
+    if (!matchedByRaw && !matchedByUserKey) return false;
+  }
+
+  if (query.sessions.length > 0) {
+    if (!facts.identity.sessionId || !query.sessions.includes(facts.identity.sessionId)) {
+      return false;
+    }
+  }
+
+  if (query.statusClasses.length > 0 && !query.statusClasses.includes(facts.statusClass)) {
+    return false;
+  }
+
+  if (query.hasError !== null && query.hasError !== facts.hasError) return false;
+  return !query.q || facts.keywordText.includes(query.q.toLowerCase());
+}
+
+export function createLogEventSummaryFromFacts(
+  facts: LogEventFacts,
   location: { id: string; date: string; line?: number | null }
 ): LogEventSummary {
-  const ts = Date.parse(event.ts_start);
   return eventToSummary({
     id: location.id,
     date: location.date,
     line: location.line ?? 0,
-    ts: Number.isFinite(ts) ? ts : 0,
-    level: getLevel(event),
-    statusClass: getStatusClass(event),
-    event,
-    tokenUsage: extractTokenUsageSummaryFromLogEvent(event),
+    ts: facts.ts,
+    level: facts.level,
+    statusClass: facts.statusClass,
+    event: facts.event,
+    identity: facts.identity,
+    tokenUsage: facts.tokenUsage,
   });
+}
+
+export function createLogEventSummaryFromEvent(
+  event: LogEvent,
+  location: { id: string; date: string; line?: number | null }
+): LogEventSummary {
+  return createLogEventSummaryFromFacts(extractLogEventFacts(event), location);
 }
 
 export function logEventMatchesQuery(event: LogEvent, query: LogQueryParams): boolean {
@@ -963,6 +1044,10 @@ async function scanEvents(
 
 export function isLogQueryWindow(value: string): value is LogQueryWindow {
   return value === '1h' || value === '6h' || value === '24h';
+}
+
+export function getLogQueryWindowMs(window: LogQueryWindow): number {
+  return WINDOW_MS[window];
 }
 
 export function resolveLogQueryRange(input: {

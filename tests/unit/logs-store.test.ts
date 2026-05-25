@@ -83,6 +83,7 @@ function jsonResponse(body: unknown): Response {
 }
 
 function resetStore(): void {
+  useLogsStore.getState().stopRealtime?.('test-reset');
   useLogsStore.setState(useLogsStore.getInitialState(), true);
 }
 
@@ -160,6 +161,10 @@ describe('logs store', () => {
     expect(state.hasMore).toBe(true);
     expect(state.stats?.total).toBe(12);
     expect(state.meta?.indexUsed).toBe(true);
+    expect(state.appliedQuery?.levels).toEqual(['error']);
+    expect(state.appliedQuery?.provider).toBe('openai');
+    expect(state.appliedQuery?.hasError).toBe(true);
+    expect(state.realtime.enabled).toBe(false);
   });
 
   test('fetchFirstPage 连续触发时应中断旧请求且忽略晚返回的旧响应', async () => {
@@ -254,5 +259,58 @@ describe('logs store', () => {
     await useLogsStore.getState().fetchNextPage();
 
     expect(callCount).toBe(0);
+  });
+
+  test('修改筛选项应清空已查询快照并关闭实时状态', async () => {
+    useLogsStore.setState({
+      appliedQuery: { window: '24h', provider: 'openai', sort: 'time_desc', limit: 50 },
+      realtime: {
+        enabled: true,
+        status: 'active',
+        subscriptionId: 'sub-1',
+        error: null,
+        received: 2,
+        dropped: 0,
+      },
+    });
+
+    useLogsStore.getState().setFilter('provider', 'anthropic');
+
+    const state = useLogsStore.getState();
+    expect(state.filters.provider).toBe('anthropic');
+    expect(state.appliedQuery).toBeNull();
+    expect(state.realtime.enabled).toBe(false);
+    expect(state.realtime.status).toBe('idle');
+  });
+
+  test('receiveRealtimeLogEvents 应批量合并去重并更新接收计数', () => {
+    useLogsStore.setState({
+      sort: 'time_desc',
+      items: [
+        createSummary('log-1', '2026-03-16T10:00:01.000Z', { message: 'old copy' }),
+        createSummary('log-2', '2026-03-16T10:00:02.000Z'),
+      ],
+    });
+
+    useLogsStore
+      .getState()
+      .receiveRealtimeLogEvents([
+        createSummary('log-3', '2026-03-16T10:00:03.000Z'),
+        createSummary('log-1', '2026-03-16T10:00:01.000Z', { message: 'new copy' }),
+      ]);
+
+    const state = useLogsStore.getState();
+    expect(state.items.map((item) => item.id)).toEqual(['log-3', 'log-2', 'log-1']);
+    expect(state.items.find((item) => item.id === 'log-1')?.message).toBe('new copy');
+    expect(state.realtime.received).toBe(2);
+  });
+
+  test('startRealtime 在没有已查询快照时应拒绝开启', async () => {
+    await useLogsStore.getState().startRealtime();
+
+    const state = useLogsStore.getState();
+    expect(state.realtime.enabled).toBe(false);
+    expect(state.realtime.status).toBe('error');
+    expect(state.realtime.error).toBe('请先查询后再开启实时推送');
   });
 });

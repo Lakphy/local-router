@@ -28,6 +28,7 @@ import {
   validateSort,
   validateStatusClass,
 } from './log-query';
+import { createLogRealtimeRuntime, type LogRealtimeRuntime } from './log-realtime';
 import { queryLogSessions } from './log-sessions';
 import { getLogStorageInfo, startLogStorageBackgroundTask } from './log-storage';
 import { subscribeLogEvents } from './log-tail';
@@ -49,6 +50,7 @@ interface AppListenOptions {
 
 export interface AppRuntime {
   app: Hono;
+  logRealtime: LogRealtimeRuntime;
   dispose: () => void;
 }
 
@@ -1071,9 +1073,12 @@ export async function createAppRuntimeFromConfigPath(
       cleanups.push(cleanup);
     },
   });
+  const logRealtime = createLogRealtimeRuntime({ store });
   return {
     app,
+    logRealtime,
     dispose: () => {
+      logRealtime.dispose();
       for (const cleanup of cleanups.reverse()) {
         try {
           cleanup();
@@ -1093,5 +1098,13 @@ export async function createDefaultAppFromProcessArgs(): Promise<Hono> {
       host: process.env.HOST ?? '0.0.0.0',
       port: Number.parseInt(process.env.PORT ?? '4099', 10),
     },
+  });
+}
+
+export async function createDefaultAppRuntimeFromProcessArgs(): Promise<AppRuntime> {
+  const configPath = parseConfigPath();
+  return createAppRuntimeFromConfigPath(configPath, {
+    host: process.env.HOST ?? '0.0.0.0',
+    port: Number.parseInt(process.env.PORT ?? '4099', 10),
   });
 }

@@ -1,4 +1,5 @@
 import { createAppRuntimeFromConfigPath } from './index';
+import type { LogRealtimeWebSocketData } from './log-realtime';
 import { REMOTE_ADDRESS_ENV_KEY } from './network-access';
 import { createServerAddressInfo } from './server-address';
 
@@ -20,6 +21,7 @@ const DEFAULT_IDLE_TIMEOUT_SECONDS = 0;
 
 interface ServerWithRequestIp {
   requestIP(request: Request): { address: string } | null;
+  upgrade(request: Request, options: { data: LogRealtimeWebSocketData }): boolean;
 }
 
 function resolveIdleTimeoutSeconds(explicit?: number): number {
@@ -49,10 +51,20 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   const server = Bun.serve({
     fetch: (request: Request, server: ServerWithRequestIp) => {
       const remoteAddress = server.requestIP(request)?.address ?? null;
+      const realtimeUpgrade = runtime.logRealtime.upgrade(request, server, remoteAddress);
+      if (realtimeUpgrade.handled) {
+        if (realtimeUpgrade.upgraded) {
+          return undefined as unknown as Response;
+        }
+        return (
+          realtimeUpgrade.response ?? new Response('WebSocket Upgrade failed', { status: 400 })
+        );
+      }
       return runtime.app.fetch(request, {
         [REMOTE_ADDRESS_ENV_KEY]: remoteAddress,
       });
     },
+    websocket: runtime.logRealtime.websocket,
     hostname: options.host,
     port: options.port,
     idleTimeout,

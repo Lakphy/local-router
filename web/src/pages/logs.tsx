@@ -1,5 +1,5 @@
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { ChevronDown, Download, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, Download, Radio, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { LogsDataTable } from '@/components/logs/logs-data-table';
@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { exportLogEvents } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useLogsStore } from '@/stores/logs-store';
@@ -67,6 +68,7 @@ export function LogsPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filters = useLogsStore((s) => s.filters);
   const sort = useLogsStore((s) => s.sort);
+  const appliedQuery = useLogsStore((s) => s.appliedQuery);
   const items = useLogsStore((s) => s.items);
   const hasMore = useLogsStore((s) => s.hasMore);
   const stats = useLogsStore((s) => s.stats);
@@ -74,12 +76,15 @@ export function LogsPage() {
   const loading = useLogsStore((s) => s.loading);
   const loadingMore = useLogsStore((s) => s.loadingMore);
   const error = useLogsStore((s) => s.error);
+  const realtime = useLogsStore((s) => s.realtime);
 
   const setFilter = useLogsStore((s) => s.setFilter);
   const setSort = useLogsStore((s) => s.setSort);
   const applyFilters = useLogsStore((s) => s.applyFilters);
   const resetFilters = useLogsStore((s) => s.resetFilters);
   const fetchNextPage = useLogsStore((s) => s.fetchNextPage);
+  const startRealtime = useLogsStore((s) => s.startRealtime);
+  const stopRealtime = useLogsStore((s) => s.stopRealtime);
 
   useEffect(() => {
     if (search.user) {
@@ -91,6 +96,10 @@ export function LogsPage() {
 
     void applyFilters();
   }, [applyFilters, search.user, search.session, setFilter]);
+
+  useEffect(() => {
+    return () => stopRealtime('page-unmount');
+  }, [stopRealtime]);
 
   const providerOptions = useMemo(
     () =>
@@ -140,6 +149,13 @@ export function LogsPage() {
     ];
     return parts.filter(Boolean).join(' · ');
   }, [meta]);
+  const realtimeDisabledReason = useMemo(() => {
+    if (loading) return '查询中';
+    if (!appliedQuery) return '查询后可开启';
+    if (sort !== 'time_desc') return '按时间倒序时可开启';
+    if (appliedQuery.to) return '固定结束时间不支持';
+    return null;
+  }, [appliedQuery, loading, sort]);
 
   async function handleExport(format: 'csv' | 'json') {
     try {
@@ -167,6 +183,14 @@ export function LogsPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '导出失败');
     }
+  }
+
+  function handleRealtimeToggle(checked: boolean) {
+    if (checked) {
+      void startRealtime();
+      return;
+    }
+    stopRealtime('manual-stop');
   }
 
   return (
@@ -236,6 +260,32 @@ export function LogsPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <div className="flex h-8 items-center gap-2 rounded-md border px-2">
+                <Radio
+                  className={cn(
+                    'h-3.5 w-3.5',
+                    realtime.status === 'active'
+                      ? 'text-emerald-600'
+                      : realtime.status === 'error'
+                        ? 'text-destructive'
+                        : 'text-muted-foreground'
+                  )}
+                />
+                <Switch
+                  id="logs-realtime"
+                  checked={realtime.enabled}
+                  disabled={!!realtimeDisabledReason}
+                  onCheckedChange={handleRealtimeToggle}
+                />
+                <Label htmlFor="logs-realtime" className="text-sm">
+                  实时
+                </Label>
+                {realtime.status === 'active' ? (
+                  <Badge variant="outline" className="hidden sm:inline-flex">
+                    +{realtime.received}
+                  </Badge>
+                ) : null}
+              </div>
               <Button size="sm" onClick={() => void applyFilters()} disabled={loading}>
                 查询
               </Button>
@@ -460,6 +510,11 @@ export function LogsPage() {
       <div className="space-y-3">
         {queryStatus ? (
           <div className="flex min-h-5 flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground">
+            {realtime.status === 'connecting' ? <span>实时连接中</span> : null}
+            {realtime.error ? <span className="text-destructive">{realtime.error}</span> : null}
+            {!realtime.enabled && realtimeDisabledReason ? (
+              <span>{realtimeDisabledReason}</span>
+            ) : null}
             <span>{queryStatus}</span>
           </div>
         ) : null}

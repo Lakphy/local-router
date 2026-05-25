@@ -30,7 +30,10 @@ export default defineConfig({
       clientPort: 5177,
     },
     proxy: {
-      '/api': 'http://localhost:4099',
+      '/api': {
+        target: 'http://localhost:4099',
+        ws: true,
+      },
       '/openai': 'http://localhost:4099',
       '/anthropic': 'http://localhost:4099',
     },
