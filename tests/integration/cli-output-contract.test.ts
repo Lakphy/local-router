@@ -65,7 +65,7 @@ describe('CLI output contract', () => {
       };
       expect(env.ok).toBe(true);
       expect(env.command).toBe('config.provider.list');
-      expect(env.schema_version).toBe(1);
+      expect(env.schema_version).toBe(2);
       expect(Array.isArray(env.data)).toBe(true);
       expect(env.data[0]?.name).toBe('p1');
       expect(typeof env.meta.elapsedMs).toBe('number');
@@ -306,6 +306,105 @@ describe('CLI output contract', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
       rmSync(runtimeDir, { recursive: true, force: true });
+    }
+  });
+
+  test('envelope v2: --verbose adds correlation_id', () => {
+    const { stdout, exitCode } = runCli(['version', '-v', '--output', 'json']);
+    expect(exitCode).toBe(0);
+    const env = JSON.parse(stdout) as { schema_version: number; correlation_id?: string };
+    expect(env.schema_version).toBe(2);
+    expect(typeof env.correlation_id).toBe('string');
+    expect(env.correlation_id!.length).toBeGreaterThan(0);
+  });
+
+  test('envelope v2: default JSON has no correlation_id', () => {
+    const { stdout, exitCode } = runCli(['version', '--output', 'json']);
+    expect(exitCode).toBe(0);
+    const env = JSON.parse(stdout) as { schema_version: number; correlation_id?: string };
+    expect(env.schema_version).toBe(2);
+    expect(env.correlation_id).toBeUndefined();
+  });
+
+  test('--explain markdown emits json frontmatter comment', () => {
+    const { stdout, exitCode } = runCli(['version', '--explain']);
+    expect(exitCode).toBe(0);
+    expect(stdout.startsWith('<!-- json:')).toBe(true);
+    const match = stdout.match(/<!-- json:\n([\s\S]*?)\n-->/);
+    expect(match).toBeTruthy();
+    const env = JSON.parse(match![1]) as { ok: boolean; schema_version: number };
+    expect(env.ok).toBe(true);
+    expect(env.schema_version).toBe(2);
+  });
+
+  test('recipes lists known names', () => {
+    const { stdout, exitCode } = runCli(['recipes', '--output', 'json']);
+    expect(exitCode).toBe(0);
+    const env = JSON.parse(stdout) as {
+      data: { count: number; recipes: Array<{ name: string }> };
+    };
+    expect(env.data.count).toBeGreaterThanOrEqual(6);
+    const names = env.data.recipes.map((r) => r.name);
+    expect(names).toContain('first-run');
+    expect(names).toContain('agent-bootstrap');
+  });
+
+  test('recipes <name> returns full steps', () => {
+    const { stdout, exitCode } = runCli(['recipes', 'first-run', '--output', 'json']);
+    expect(exitCode).toBe(0);
+    const env = JSON.parse(stdout) as {
+      data: { name: string; steps: Array<{ cmd: string; why: string }> };
+    };
+    expect(env.data.name).toBe('first-run');
+    expect(env.data.steps.length).toBeGreaterThan(0);
+    expect(env.data.steps[0].cmd).toContain('local-router');
+  });
+
+  test('recipes unknown name returns USAGE_ERROR with available list', () => {
+    const { stdout, exitCode } = runCli(['recipes', 'nonexistent', '--output', 'json']);
+    expect(exitCode).toBe(2);
+    const env = JSON.parse(stdout) as {
+      ok: boolean;
+      error: { code: string; details?: { available?: string[] } };
+    };
+    expect(env.ok).toBe(false);
+    expect(env.error.code).toBe('USAGE_ERROR');
+    expect(env.error.details?.available).toContain('first-run');
+  });
+
+  test('LOCAL_ROUTER_CORRELATION_ID env is passed through verbatim', () => {
+    const { stdout, exitCode } = runCli(
+      ['version', '--output', 'json'],
+      { LOCAL_ROUTER_CORRELATION_ID: 'test-fixed-abc' }
+    );
+    expect(exitCode).toBe(0);
+    const env = JSON.parse(stdout) as { correlation_id?: string };
+    expect(env.correlation_id).toBe('test-fixed-abc');
+  });
+
+  test('config provider plugin add --index negative returns USAGE_ERROR', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cli-test-plugin-'));
+    const configPath = join(dir, 'config.json5');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        providers: {
+          demo: { type: 'openai-completions', base: 'http://x', apiKey: 'k', models: [{ name: 'a' }] },
+        },
+        routes: {},
+      })
+    );
+    try {
+      const { stdout, exitCode } = runCli([
+        'config', 'provider', 'plugin', 'add', 'demo', 'some-pkg',
+        '--index', '-1', '--config', configPath, '--output', 'json',
+      ]);
+      expect(exitCode).toBe(2);
+      const env = JSON.parse(stdout) as { ok: boolean; error: { code: string } };
+      expect(env.ok).toBe(false);
+      expect(env.error.code).toBe('USAGE_ERROR');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

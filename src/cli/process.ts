@@ -1,4 +1,14 @@
-import { closeSync, openSync, readFileSync, statSync } from 'node:fs';
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { ensureConfigFile, resolveConfigPath } from '../config';
@@ -82,6 +92,65 @@ export async function cleanupIfStale(): Promise<void> {
   clearRuntimeFiles();
 }
 
+const DAEMON_LOG_RETAIN_DAYS = 7;
+
+/**
+ * Rotate daemon.log if current file is older than retention period.
+ * Old rotated logs beyond retention are deleted.
+ */
+function rotateDaemonLog(logPath: string): void {
+  if (!existsSync(logPath)) return;
+  try {
+    const st = statSync(logPath);
+    const ageMs = Date.now() - st.mtimeMs;
+    if (ageMs > DAEMON_LOG_RETAIN_DAYS * 86400_000) {
+      const dateStr = new Date(st.mtimeMs).toISOString().slice(0, 10);
+      const rotated = `${logPath}.${dateStr}`;
+      const { renameSync } = require('node:fs');
+      renameSync(logPath, rotated);
+    }
+  } catch {}
+  // Remove rotated logs older than retention
+  const dir = dirname(logPath);
+  try {
+    for (const f of readdirSync(dir)) {
+      if (!f.startsWith('daemon.log.')) continue;
+      const fullPath = join(dir, f);
+      try {
+        const st = statSync(fullPath);
+        if (Date.now() - st.mtimeMs > DAEMON_LOG_RETAIN_DAYS * 86400_000) {
+          rmSync(fullPath, { force: true });
+        }
+      } catch {}
+    }
+  } catch {}
+}
+
+/**
+ * Patch console.log / console.error to also write to a log file.
+ * Used in foreground mode so runtime logs are persisted.
+ */
+function teeConsoleToFile(logPath: string): void {
+  const origLog = console.log.bind(console);
+  const origError = console.error.bind(console);
+  const write = (line: string) => {
+    try {
+      const ts = new Date().toISOString();
+      appendFileSync(logPath, `[${ts}] ${line}\n`);
+    } catch {}
+  };
+  console.log = (...args: unknown[]) => {
+    const msg = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+    origLog(...args);
+    write(msg);
+  };
+  console.error = (...args: unknown[]) => {
+    const msg = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+    origError(...args);
+    write(msg);
+  };
+}
+
 export async function runServerProcess(opts: {
   mode: 'daemon' | 'foreground';
   config?: string;
@@ -90,6 +159,13 @@ export async function runServerProcess(opts: {
   idleTimeoutSeconds?: number;
   logFile?: string;
 }): Promise<never> {
+  ensureRuntimeDirs();
+  const files = getRuntimeFiles();
+  rotateDaemonLog(files.daemonLog);
+  if (opts.mode === 'foreground') {
+    teeConsoleToFile(files.daemonLog);
+  }
+
   await cleanupIfStale();
   const configPath = resolveConfigPath(opts.config);
   const ensured = ensureConfigFile(configPath);
@@ -178,6 +254,7 @@ export async function startDaemon(flags: CliSharedFlags): Promise<void> {
 
   ensureRuntimeDirs();
   const files = getRuntimeFiles();
+  rotateDaemonLog(files.daemonLog);
 
   const stdoutFd = openSync(files.daemonLog, 'a');
   const stderrFd = openSync(files.daemonLog, 'a');

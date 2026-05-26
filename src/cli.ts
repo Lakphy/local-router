@@ -1,15 +1,27 @@
 #!/usr/bin/env bun
 
-import { cmdConfig } from './cli/config-command';
+import './cli/config-registrations';
 import { CliError } from './cli/errors';
 import { extractGlobalFlags, type GlobalFlags } from './cli/global-flags';
+import './cli/handlers/chat';
+import './cli/handlers/config-p0';
+import './cli/handlers/config-p2';
 import './cli/handlers/diagnose';
 import './cli/handlers/introspection';
 import './cli/handlers/lifecycle';
 import './cli/handlers/logs';
+import './cli/handlers/logs-extra';
+import './cli/handlers/recipes';
 import './cli/handlers/server';
 import { createOutputContext, emitError, emitResult, runCommand } from './cli/output';
-import { allCommandNames, getCommand, listCommands, matchCommand } from './cli/registry';
+import { nearest } from './cli/parse-args';
+import {
+  allCommandNames,
+  defineCommand,
+  getCommand,
+  listCommands,
+  matchCommand,
+} from './cli/registry';
 import { renderTable } from './cli/render-md';
 import { loadConfig, type RouteTarget, resolveConfigPath } from './config';
 
@@ -142,20 +154,27 @@ async function cmdGetRoute(args: string[], flags: GlobalFlags): Promise<number> 
   });
 }
 
+defineCommand({
+  name: 'get-route',
+  summary: '查询路由命中（旧 CLI 兼容）',
+  flags: [
+    { name: 'type', type: 'string', required: true, description: '协议入口' },
+    { name: 'model-alias', type: 'string', description: '请求 model 别名' },
+    { name: 'model', type: 'string', description: '请求 model（同 --model-alias）' },
+    { name: 'config', type: 'string', description: '配置文件路径' },
+  ],
+  supportsJson: true,
+  handler: cmdGetRoute,
+});
+
 function isLogsSubcommand(arg: string | undefined): boolean {
   if (!arg) return false;
-  return [
-    'daemon',
-    'events',
-    'event',
-    'sessions',
-    'tail',
-    'metrics',
-    'storage',
-    'export',
-    'last-error',
-    'replay',
-  ].includes(arg);
+  // Derived from the registry so new `logs <x>` commands auto-participate.
+  return allCommandNames().includes(`logs ${arg}`);
+}
+
+function nearestCommand(input: string, names: string[]): string | undefined {
+  return nearest(input, names);
 }
 
 async function dispatch(argv: string[]): Promise<number> {
@@ -177,11 +196,14 @@ async function dispatch(argv: string[]): Promise<number> {
     const target = rest.slice(1).join(' ');
     const cmd = getCommand(target);
     if (!cmd) {
+      const suggestion = nearestCommand(target, allCommandNames());
       return emitError(
         createOutputContext(flags),
         'help',
         new CliError('USAGE_ERROR', `未知命令: ${target}`, {
-          hint: `已注册: ${allCommandNames().join(', ')}`,
+          hint: suggestion
+            ? `也许是 \`${suggestion}\`? · 全部: \`local-router commands\``
+            : `已注册: ${allCommandNames().slice(0, 12).join(', ')}…`,
         })
       );
     }
@@ -235,21 +257,17 @@ async function dispatch(argv: string[]): Promise<number> {
     rest = ['logs', 'daemon', ...rest.slice(1)];
   }
 
-  if (rest[0] === 'config') {
-    return await cmdConfig(rest.slice(1), flags);
-  }
-
-  if (rest[0] === 'get-route') {
-    return await cmdGetRoute(rest.slice(1), flags);
-  }
-
   const matched = matchCommand(rest);
   if (!matched) {
+    const guess = rest.slice(0, Math.min(3, rest.length)).join(' ');
+    const suggestion = nearestCommand(guess, allCommandNames());
     return emitError(
       createOutputContext(flags),
       rest.join(' '),
       new CliError('USAGE_ERROR', `未知命令: ${rest.join(' ')}`, {
-        hint: `运行 \`local-router help\` 查看可用命令`,
+        hint: suggestion
+          ? `也许是 \`${suggestion}\`? · 全部: \`local-router commands\``
+          : `运行 \`local-router help\` 查看可用命令`,
         details: { available: allCommandNames() },
       })
     );

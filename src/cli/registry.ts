@@ -1,4 +1,5 @@
 import type { GlobalFlags } from './global-flags';
+import type { OutputContext } from './output';
 
 export type FlagType = 'string' | 'boolean' | 'number' | 'enum';
 
@@ -98,4 +99,50 @@ export function matchCommand(argv: string[]): { command: CommandDef; rest: strin
 /** All registered names, lexically sorted; useful for completion. */
 export function allCommandNames(): string[] {
   return [...ORDER].sort();
+}
+
+/**
+ * Spec-first command sugar: `flags` is the single source of truth for both
+ * the help/schema metadata AND the runtime parser. Handler signature drops
+ * the raw args list and instead receives pre-parsed `values` / `positionals`.
+ *
+ * Internally desugars to `defineCommand` so consumers of the registry (help,
+ * schema export, completion, did-you-mean) keep working unchanged.
+ */
+export interface SchemaCommandDef<TValues = Record<string, unknown>>
+  extends Omit<CommandDef, 'handler'> {
+  fn: (args: {
+    values: TValues;
+    positionals: string[];
+    flags: GlobalFlags;
+    ctx: OutputContext;
+  }) => Promise<void> | void;
+}
+
+export function defineSchemaCommand<TValues = Record<string, unknown>>(
+  def: SchemaCommandDef<TValues>
+): CommandDef {
+  const { fn, ...meta } = def;
+  return defineCommand({
+    ...meta,
+    handler: async (args, flags) => {
+      // Lazy import to avoid registry → parse-args → registry cycle.
+      const { parseCommandArgs } = await import('./parse-args');
+      const { runCommandWithSchema } = await import('./output');
+      let parsed: ReturnType<typeof parseCommandArgs>;
+      try {
+        parsed = parseCommandArgs(meta as CommandDef, args);
+      } catch (err) {
+        const { emitError, createOutputContext } = await import('./output');
+        return emitError(createOutputContext(flags), meta.name, err);
+      }
+      return runCommandWithSchema<TValues>({
+        command: meta.name,
+        flags,
+        values: parsed.values as TValues,
+        positionals: parsed.positionals,
+        fn: ({ values, positionals, ctx }) => fn({ values, positionals, flags, ctx }),
+      });
+    },
+  });
 }

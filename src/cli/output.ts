@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { type CliError, isCliError } from './errors';
 import { DEFAULT_FLAGS, type GlobalFlags } from './global-flags';
 import {
@@ -18,6 +19,8 @@ export interface ResultPayload<T = unknown> {
   md?: MdSection;
   /** Plain text rendering for --output text. Falls back to compact JSON if missing. */
   text?: string;
+  /** Suggested follow-up commands the agent could run. */
+  next?: Array<{ command: string; reason: string }>;
 }
 
 export interface OutputContext {
@@ -37,10 +40,29 @@ function writeStdout(line: string): void {
   }
 }
 
+function genCorrelationId(): string {
+  return randomUUID();
+}
+
+/**
+ * correlation_id source of truth:
+ * - If `LOCAL_ROUTER_CORRELATION_ID` env is set, pass through verbatim (lets
+ *   external tooling thread a fixed trace id across multiple CLI invocations).
+ * - Otherwise generate one only when explicitly requested via --verbose
+ *   (machine consumers wanting trace IDs) or --explain (AI frontmatter).
+ */
+function resolveCorrelationId(ctx: OutputContext): string | undefined {
+  const env = process.env.LOCAL_ROUTER_CORRELATION_ID;
+  if (env) return env;
+  if (ctx.flags.verbose || ctx.flags.explain) return genCorrelationId();
+  return undefined;
+}
+
 export function emitResult<T>(ctx: OutputContext, payload: ResultPayload<T>): void {
   const elapsedMs = Date.now() - ctx.startedAt;
   const meta = { elapsedMs, ...(payload.meta ?? {}) };
   const fmt = ctx.flags.output;
+  const correlationId = resolveCorrelationId(ctx);
 
   if (fmt === 'json') {
     const env: JsonResultEnvelope<T> = {
@@ -50,7 +72,9 @@ export function emitResult<T>(ctx: OutputContext, payload: ResultPayload<T>): vo
       data: payload.data,
       meta,
     };
+    if (correlationId) env.correlation_id = correlationId;
     if (payload.warnings && payload.warnings.length > 0) env.warnings = payload.warnings;
+    if (payload.next && payload.next.length > 0) env.next = payload.next;
     writeStdout(renderJsonResult(env));
     return;
   }
@@ -61,8 +85,10 @@ export function emitResult<T>(ctx: OutputContext, payload: ResultPayload<T>): vo
         ok: true,
         command: payload.command,
         schema_version: SCHEMA_VERSION,
+        ...(correlationId ? { correlation_id: correlationId } : {}),
         data: payload.data,
         meta,
+        ...(payload.next && payload.next.length > 0 ? { next: payload.next } : {}),
       })
     );
     return;
@@ -77,7 +103,36 @@ export function emitResult<T>(ctx: OutputContext, payload: ResultPayload<T>): vo
     return;
   }
   if (payload.md) {
-    process.stdout.write(renderMd(payload.md));
+    const md = renderMd(payload.md);
+    if (ctx.flags.explain) {
+      // AI frontmatter: machine-readable hint at top of markdown
+      const frontmatter = [
+        '<!-- json:',
+        JSON.stringify(
+          {
+            ok: true,
+            command: payload.command,
+            schema_version: SCHEMA_VERSION,
+            correlation_id: correlationId,
+            data: payload.data,
+            meta,
+            next: payload.next ?? [],
+          },
+          null,
+          2
+        ),
+        '-->',
+        '',
+      ].join('\n');
+      process.stdout.write(frontmatter + md);
+    } else {
+      process.stdout.write(md);
+    }
+    if (payload.next && payload.next.length > 0 && ctx.flags.explain) {
+      process.stdout.write(
+        `\n**下一步建议**\n\n${payload.next.map((n) => `- \`${n.command}\` — ${n.reason}`).join('\n')}\n`
+      );
+    }
     return;
   }
   process.stdout.write(
@@ -217,5 +272,36 @@ export async function runCommand({ command, flags, fn }: CommandRunOptions): Pro
     return 0;
   } catch (err) {
     return emitError(ctx, command, err);
+  }
+}
+
+export interface CommandRunWithSchemaOptions<TValues> {
+  command: string;
+  flags: GlobalFlags;
+  /** Pre-parsed and validated flag values (from parseCommandArgs). */
+  values: TValues;
+  /** Positional args after flag stripping. */
+  positionals: string[];
+  fn: (args: {
+    values: TValues;
+    positionals: string[];
+    ctx: OutputContext;
+  }) => Promise<void> | void;
+}
+
+/**
+ * Like runCommand, but signature mirrors the spec-first engine: handler
+ * receives pre-parsed values/positionals instead of raw args. Use this from
+ * the registry dispatch path so each handler stays declarative.
+ */
+export async function runCommandWithSchema<TValues>(
+  opts: CommandRunWithSchemaOptions<TValues>
+): Promise<number> {
+  const ctx = createOutputContext(opts.flags);
+  try {
+    await opts.fn({ values: opts.values, positionals: opts.positionals, ctx });
+    return 0;
+  } catch (err) {
+    return emitError(ctx, opts.command, err);
   }
 }

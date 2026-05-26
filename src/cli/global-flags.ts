@@ -9,6 +9,8 @@ export interface GlobalFlags {
   noColor: boolean;
   noInteractive: boolean;
   yes: boolean;
+  /** When true, hints/explanations are amplified for AI agents. */
+  explain: boolean;
 }
 
 const VALID_OUTPUTS: OutputFormat[] = ['markdown', 'json', 'ndjson', 'text'];
@@ -40,6 +42,7 @@ export function extractGlobalFlags(args: string[]): { flags: GlobalFlags; rest: 
   let noInteractive = false;
   let yes = false;
   let jsonAlias = false;
+  let explain = false;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -82,6 +85,10 @@ export function extractGlobalFlags(args: string[]): { flags: GlobalFlags; rest: 
       yes = true;
       continue;
     }
+    if (a === '--explain') {
+      explain = true;
+      continue;
+    }
     rest.push(a);
   }
 
@@ -109,6 +116,7 @@ export function extractGlobalFlags(args: string[]): { flags: GlobalFlags; rest: 
       noColor: noColor || !!process.env.NO_COLOR,
       noInteractive: noInteractive || process.env.LOCAL_ROUTER_NO_INTERACTIVE === '1',
       yes,
+      explain: explain || process.env.LOCAL_ROUTER_EXPLAIN === '1',
     },
     rest,
   };
@@ -121,4 +129,5 @@ export const DEFAULT_FLAGS: GlobalFlags = {
   noColor: false,
   noInteractive: false,
   yes: false,
+  explain: false,
 };
