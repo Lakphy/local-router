@@ -11,7 +11,7 @@ import {
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
-import { ensureConfigFile, resolveConfigPath } from '../config';
+import { ensureConfigFile, loadConfig, resolveConfigPath } from '../config';
 import { type RunningServer, startServer } from '../server';
 import {
   clearRuntimeFiles,
@@ -173,14 +173,17 @@ export async function runServerProcess(opts: {
     console.log(`首次启动已创建配置文件: ${ensured.path}`);
   }
 
-  const host = opts.host ?? process.env.HOST ?? '0.0.0.0';
-  const port = opts.port ?? Number.parseInt(process.env.PORT ?? '4099', 10);
+  const config = loadConfig(ensured.path);
+  const host = opts.host ?? process.env.HOST ?? config.server?.host ?? '0.0.0.0';
+  const envPort = Number.parseInt(process.env.PORT ?? '', 10);
+  const port = opts.port ?? (envPort || undefined) ?? config.server?.port ?? 4099;
   if (!Number.isFinite(port)) {
     throw new Error(`无效端口: ${opts.port ?? process.env.PORT}`);
   }
 
+  const envIdleTimeout = Number.parseInt(process.env.LOCAL_ROUTER_IDLE_TIMEOUT ?? '', 10);
   const idleTimeoutSeconds =
-    opts.idleTimeoutSeconds ?? Number.parseInt(process.env.LOCAL_ROUTER_IDLE_TIMEOUT ?? '', 10);
+    opts.idleTimeoutSeconds ?? (envIdleTimeout || undefined) ?? config.server?.idleTimeout;
 
   let running: RunningServer;
   try {

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { createAutostartManager, getAutostartExecArgs } from './cli/autostart';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
@@ -411,6 +412,48 @@ function createAdminApiRoutes(
         { error: `读取配置 schema 失败: ${err instanceof Error ? err.message : err}` },
         500
       );
+    }
+  });
+
+  // ─── Autostart ───────────────────────────────────────────────────────────
+  api.get('/autostart', async (c) => {
+    try {
+      const manager = createAutostartManager();
+      const systemInstalled = await manager.isInstalled();
+      const config = store.get();
+      return c.json({
+        enabled: config.server?.autostart ?? false,
+        systemInstalled,
+        platform: manager.platform,
+        servicePath: manager.getServicePath(),
+      });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+    }
+  });
+
+  api.put('/autostart', async (c) => {
+    try {
+      const { enabled } = await c.req.json<{ enabled: boolean }>();
+      if (typeof enabled !== 'boolean') {
+        return c.json({ error: 'enabled 必须是布尔值' }, 400);
+      }
+      const manager = createAutostartManager();
+      if (manager.platform === 'unsupported') {
+        return c.json({ error: '当前平台不支持自启动' }, 400);
+      }
+      if (enabled) {
+        const { execPath, args } = getAutostartExecArgs();
+        await manager.install({ execPath, args, label: 'com.lakphy.local-router' });
+      } else {
+        await manager.uninstall();
+      }
+      const config = store.get();
+      const updated = { ...config, server: { ...config.server, autostart: enabled } };
+      store.save(updated);
+      return c.json({ ok: true, enabled });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
     }
   });
 

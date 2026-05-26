@@ -118,6 +118,10 @@ export interface ServerConfig {
   lanAccess?: {
     enabled?: boolean;
   };
+  autostart?: boolean;
+  host?: string;
+  port?: number;
+  idleTimeout?: number;
 }
 
 export interface AppConfig {

@@ -3,6 +3,7 @@
 import './cli/config-registrations';
 import { CliError } from './cli/errors';
 import { extractGlobalFlags, type GlobalFlags } from './cli/global-flags';
+import './cli/handlers/autostart';
 import './cli/handlers/chat';
 import './cli/handlers/config-p0';
 import './cli/handlers/config-p2';

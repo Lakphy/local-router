@@ -509,3 +509,33 @@ export async function exportLogEvents(
 
   return res.blob();
 }
+
+// ─── Autostart ──────────────────────────────────────────────────────────────
+
+export interface AutostartStatus {
+  enabled: boolean;
+  systemInstalled: boolean;
+  platform: string;
+  servicePath: string;
+}
+
+export async function fetchAutostartStatus(): Promise<AutostartStatus> {
+  const res = await fetch('/api/autostart');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `获取自启动状态失败: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function setAutostart(enabled: boolean): Promise<void> {
+  const res = await fetch('/api/autostart', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `设置自启动失败: ${res.status}`);
+  }
+}

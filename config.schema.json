@@ -211,6 +211,28 @@
         "lanAccess": {
           "$ref": "#/$defs/lanAccessConfig",
           "description": "局域网访问控制。默认关闭。"
+        },
+        "autostart": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否开机自启动（用户登录时自动启动 daemon）。默认为 false。"
+        },
+        "host": {
+          "type": "string",
+          "default": "0.0.0.0",
+          "description": "服务监听地址。默认 0.0.0.0（所有网卡）。"
+        },
+        "port": {
+          "type": "integer",
+          "default": 4099,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "服务监听端口。默认 4099。"
+        },
+        "idleTimeout": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Bun 连接空闲超时秒数。0 或不设则不限制。"
         }
       }
     },
