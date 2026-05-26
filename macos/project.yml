@@ -1,0 +1,48 @@
+name: LocalRouter
+options:
+  bundleIdPrefix: com.lakphy
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+targets:
+  LocalRouter:
+    type: application
+    platform: macOS
+    sources:
+      - path: LocalRouter
+        excludes:
+          - "**/*.xcassets/**"
+    resources:
+      - path: LocalRouter/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lakphy.local-router
+        PRODUCT_NAME: Local Router
+        INFOPLIST_GENERATION_MODE: GeneratedFile
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.developer-tools"
+        INFOPLIST_KEY_CFBundleDisplayName: "Local Router"
+        SWIFT_STRICT_CONCURRENCY: complete
+    entitlements:
+      path: LocalRouter/LocalRouter.entitlements
+
+  LocalRouterTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: LocalRouterTests
+    dependencies:
+      - target: LocalRouter
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lakphy.local-router.tests
+        GENERATE_INFOPLIST_FILE: YES
