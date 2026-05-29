@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { LogConfig } from './config';
 import { resolveLogBaseDir } from './config';
+import { queryIndexedLogSessions } from './log-index';
 import { resolveLogSessionIdentity } from './log-session-identity';
 import type { LogEvent } from './logger';
 
@@ -47,6 +48,10 @@ export interface LogSessionsMeta {
   scannedLines: number;
   parseErrors: number;
   truncated: boolean;
+  indexUsed?: boolean;
+  indexFresh?: boolean;
+  queryMs?: number;
+  fallbackReason?: string;
 }
 
 export interface LogSessionsResult {
@@ -239,6 +244,25 @@ export async function queryLogSessions(
     return createEmptyResult(normalized.fromMs, normalized.toMs);
   }
 
+  const indexed = await queryIndexedLogSessions(context.logConfig, {
+    fromMs: normalized.fromMs,
+    toMs: normalized.toMs,
+    users: normalized.users,
+    sessions: normalized.sessions,
+    q: normalized.q,
+  });
+  if (indexed?.meta.indexUsed) {
+    return {
+      from: indexed.from,
+      to: indexed.to,
+      summary: indexed.summary,
+      users: indexed.users,
+      meta: indexed.meta,
+    };
+  }
+
+  const fallbackReason = indexed?.meta.fallbackReason;
+
   const baseDir = resolveLogBaseDir(context.logConfig);
   const eventsDir = join(baseDir, 'events');
   if (!existsSync(eventsDir)) {
@@ -389,6 +413,8 @@ export async function queryLogSessions(
       scannedLines,
       parseErrors,
       truncated,
+      indexUsed: false,
+      ...(fallbackReason ? { fallbackReason } : {}),
     },
   };
 }

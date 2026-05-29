@@ -15,31 +15,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { LogEventSummary } from '@/lib/api';
+import { calculateVirtualRange } from '@/lib/virtual-list';
 import { createLogsColumns } from './logs-columns';
 
 const ROW_HEIGHT = 44;
-const VIEWPORT_HEIGHT = 560;
-const OVERSCAN_ROWS = 8;
 
-export function calculateLogsVirtualRange(input: {
-  dataLength: number;
-  scrollTop: number;
-  viewportHeight?: number;
-  rowHeight?: number;
-  overscanRows?: number;
-}): { start: number; end: number } {
-  const dataLength = Math.max(0, input.dataLength);
-  const rowHeight = input.rowHeight ?? ROW_HEIGHT;
-  const viewportHeight = input.viewportHeight ?? VIEWPORT_HEIGHT;
-  const overscanRows = input.overscanRows ?? OVERSCAN_ROWS;
-  const visibleRows = Math.ceil(viewportHeight / rowHeight);
-  const windowSize = visibleRows + overscanRows * 2;
-  const maxStart = Math.max(0, dataLength - windowSize);
-  const rawStart = Math.max(0, Math.floor(input.scrollTop / rowHeight) - overscanRows);
-  const start = Math.min(rawStart, maxStart);
-  const end = Math.min(dataLength, start + windowSize);
-  return { start, end };
-}
+export { calculateVirtualRange as calculateLogsVirtualRange };
 
 export function LogsDataTable(props: {
   data: LogEventSummary[];
@@ -52,7 +33,7 @@ export function LogsDataTable(props: {
   const [scrollTop, setScrollTop] = useState(0);
 
   const virtualRange = useMemo(
-    () => calculateLogsVirtualRange({ dataLength: data.length, scrollTop }),
+    () => calculateVirtualRange({ dataLength: data.length, scrollTop }),
     [data.length, scrollTop]
   );
 

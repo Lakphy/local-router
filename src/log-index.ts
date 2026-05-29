@@ -120,6 +120,62 @@ export interface IndexedLogEventRecord {
   location: IndexedLogEventLocation;
 }
 
+export interface IndexedLogSessionsQuery {
+  fromMs: number;
+  toMs: number;
+  users: string[];
+  sessions: string[];
+  q: string;
+}
+
+export interface IndexedSessionCountItem {
+  key: string;
+  count: number;
+}
+
+export interface IndexedLogSessionSummary {
+  sessionId: string;
+  requestCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  models: IndexedSessionCountItem[];
+  latestRequestId: string;
+}
+
+export interface IndexedLogUserSummary {
+  userKey: string;
+  requestCount: number;
+  sessionCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  models: IndexedSessionCountItem[];
+  providers: IndexedSessionCountItem[];
+  routeTypes: IndexedSessionCountItem[];
+  sessions: IndexedLogSessionSummary[];
+}
+
+export interface IndexedLogSessionsResult {
+  from: string;
+  to: string;
+  summary: {
+    totalRequests: number;
+    metadataRequests: number;
+    uniqueUsers: number;
+    uniqueSessions: number;
+  };
+  users: IndexedLogUserSummary[];
+  meta: {
+    scannedFiles: number;
+    scannedLines: number;
+    parseErrors: number;
+    truncated: boolean;
+    indexUsed: boolean;
+    indexFresh: boolean;
+    queryMs: number;
+    fallbackReason?: string;
+  };
+}
+
 interface LogCursorV2 {
   v: 2;
   sort: IndexedLogSort;
@@ -627,6 +683,73 @@ function buildWhereClause(
   };
 }
 
+function buildSessionsWhereClause(query: IndexedLogSessionsQuery): {
+  whereSql: string;
+  params: unknown[];
+} {
+  const pseudo: IndexedLogQuery = {
+    fromMs: query.fromMs,
+    toMs: query.toMs,
+    levels: [],
+    providers: [],
+    routeTypes: [],
+    models: [],
+    modelIns: [],
+    modelOuts: [],
+    users: query.users,
+    sessions: query.sessions,
+    statusClasses: [],
+    hasError: null,
+    q: query.q,
+    sort: 'time_desc',
+    limit: 1,
+    cursor: null,
+  };
+  const { whereSql, params } = buildWhereClause(pseudo);
+  return { whereSql, params };
+}
+
+function sortIndexedCountItems(map: Map<string, number>): IndexedSessionCountItem[] {
+  return Array.from(map.entries())
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+}
+
+interface SessionAggRow {
+  userKey: string;
+  sessionId: string;
+  requestCount: number;
+  firstMs: number;
+  lastMs: number;
+}
+
+interface UserAggRow {
+  userKey: string;
+  requestCount: number;
+  firstMs: number;
+  lastMs: number;
+  sessionCount: number;
+}
+
+interface CountRow {
+  userKey: string;
+  key: string | null;
+  count: number;
+}
+
+interface SessionCountRow {
+  userKey: string;
+  sessionId: string;
+  key: string | null;
+  count: number;
+}
+
+interface LatestRequestRow {
+  userKey: string;
+  sessionId: string;
+  latestRequestId: string;
+}
+
 class LogIndex {
   private db: Database;
   private queue: QueueItem[] = [];
@@ -889,6 +1012,207 @@ class LogIndex {
         line: row?.line_number ?? null,
         offset: row?.byte_offset ?? parsedId.offset,
       },
+    };
+  }
+
+  querySessions(query: IndexedLogSessionsQuery): Omit<IndexedLogSessionsResult, 'meta'> & {
+    queryMs: number;
+  } {
+    const startedAt = performance.now();
+    const { whereSql, params } = buildSessionsWhereClause(query);
+    const aggregatedWhere = `${whereSql} AND e.user_key IS NOT NULL AND e.session_id IS NOT NULL`;
+
+    // totalRequests/metadataRequests count every event in range, while the per-user
+    // breakdown below only counts identity-bearing events (aggregatedWhere). The two
+    // intentionally differ: unattributable requests still contribute to the totals.
+    // uniqueSessions keys on user_key+session_id to match the per-user sessionCount and
+    // the realtime fold, so a session_id reused across users isn't collapsed.
+    const summaryRow = this.db
+      .query(`
+        SELECT
+          COUNT(*) AS totalRequests,
+          COALESCE(SUM(has_metadata), 0) AS metadataRequests,
+          COUNT(DISTINCT user_key) AS uniqueUsers,
+          COUNT(DISTINCT CASE
+            WHEN user_key IS NOT NULL AND session_id IS NOT NULL
+            THEN user_key || ' ' || session_id
+          END) AS uniqueSessions
+        FROM log_events e
+        ${whereSql}
+      `)
+      .get(...params) as {
+      totalRequests: number;
+      metadataRequests: number;
+      uniqueUsers: number;
+      uniqueSessions: number;
+    };
+
+    const userRows = this.db
+      .query(`
+        SELECT
+          user_key AS userKey,
+          COUNT(*) AS requestCount,
+          MIN(ts_ms) AS firstMs,
+          MAX(ts_ms) AS lastMs,
+          COUNT(DISTINCT session_id) AS sessionCount
+        FROM log_events e
+        ${aggregatedWhere}
+        GROUP BY user_key
+      `)
+      .all(...params) as UserAggRow[];
+
+    const sessionRows = this.db
+      .query(`
+        SELECT
+          user_key AS userKey,
+          session_id AS sessionId,
+          COUNT(*) AS requestCount,
+          MIN(ts_ms) AS firstMs,
+          MAX(ts_ms) AS lastMs
+        FROM log_events e
+        ${aggregatedWhere}
+        GROUP BY user_key, session_id
+      `)
+      .all(...params) as SessionAggRow[];
+
+    const userModelRows = this.db
+      .query(`
+        SELECT user_key AS userKey, model AS key, COUNT(*) AS count
+        FROM log_events e
+        ${aggregatedWhere}
+        GROUP BY user_key, model
+      `)
+      .all(...params) as CountRow[];
+
+    const userProviderRows = this.db
+      .query(`
+        SELECT user_key AS userKey, provider AS key, COUNT(*) AS count
+        FROM log_events e
+        ${aggregatedWhere}
+        GROUP BY user_key, provider
+      `)
+      .all(...params) as CountRow[];
+
+    const userRouteRows = this.db
+      .query(`
+        SELECT user_key AS userKey, route_type AS key, COUNT(*) AS count
+        FROM log_events e
+        ${aggregatedWhere}
+        GROUP BY user_key, route_type
+      `)
+      .all(...params) as CountRow[];
+
+    const sessionModelRows = this.db
+      .query(`
+        SELECT user_key AS userKey, session_id AS sessionId, model AS key, COUNT(*) AS count
+        FROM log_events e
+        ${aggregatedWhere}
+        GROUP BY user_key, session_id, model
+      `)
+      .all(...params) as SessionCountRow[];
+
+    const latestRows = this.db
+      .query(`
+        SELECT userKey, sessionId, request_id AS latestRequestId
+        FROM (
+          SELECT
+            user_key AS userKey,
+            session_id AS sessionId,
+            request_id,
+            ROW_NUMBER() OVER (
+              PARTITION BY user_key, session_id ORDER BY ts_ms DESC, id DESC
+            ) AS rn
+          FROM log_events e
+          ${aggregatedWhere}
+        )
+        WHERE rn = 1
+      `)
+      .all(...params) as LatestRequestRow[];
+
+    const userModels = new Map<string, Map<string, number>>();
+    const userProviders = new Map<string, Map<string, number>>();
+    const userRoutes = new Map<string, Map<string, number>>();
+    const sessionModels = new Map<string, Map<string, number>>();
+    const latestBySession = new Map<string, string>();
+
+    const addCount = (
+      target: Map<string, Map<string, number>>,
+      groupKey: string,
+      key: string | null,
+      count: number
+    ): void => {
+      if (!key) return;
+      let inner = target.get(groupKey);
+      if (!inner) {
+        inner = new Map<string, number>();
+        target.set(groupKey, inner);
+      }
+      inner.set(key, count);
+    };
+
+    for (const row of userModelRows) addCount(userModels, row.userKey, row.key, row.count);
+    for (const row of userProviderRows) addCount(userProviders, row.userKey, row.key, row.count);
+    for (const row of userRouteRows) addCount(userRoutes, row.userKey, row.key, row.count);
+    for (const row of sessionModelRows) {
+      addCount(sessionModels, `${row.userKey} ${row.sessionId}`, row.key, row.count);
+    }
+    for (const row of latestRows) {
+      latestBySession.set(`${row.userKey} ${row.sessionId}`, row.latestRequestId);
+    }
+
+    const sessionsByUser = new Map<string, IndexedLogSessionSummary[]>();
+    for (const row of sessionRows) {
+      const sessionKey = `${row.userKey} ${row.sessionId}`;
+      const session: IndexedLogSessionSummary = {
+        sessionId: row.sessionId,
+        requestCount: row.requestCount,
+        firstSeenAt: new Date(row.firstMs).toISOString(),
+        lastSeenAt: new Date(row.lastMs).toISOString(),
+        models: sortIndexedCountItems(sessionModels.get(sessionKey) ?? new Map()),
+        latestRequestId: latestBySession.get(sessionKey) ?? '',
+      };
+      const list = sessionsByUser.get(row.userKey);
+      if (list) {
+        list.push(session);
+      } else {
+        sessionsByUser.set(row.userKey, [session]);
+      }
+    }
+
+    const users: IndexedLogUserSummary[] = userRows
+      .map((row) => {
+        const sessions = (sessionsByUser.get(row.userKey) ?? []).sort((a, b) => {
+          if (a.requestCount !== b.requestCount) return b.requestCount - a.requestCount;
+          return Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt);
+        });
+        return {
+          userKey: row.userKey,
+          requestCount: row.requestCount,
+          sessionCount: row.sessionCount,
+          firstSeenAt: new Date(row.firstMs).toISOString(),
+          lastSeenAt: new Date(row.lastMs).toISOString(),
+          models: sortIndexedCountItems(userModels.get(row.userKey) ?? new Map()),
+          providers: sortIndexedCountItems(userProviders.get(row.userKey) ?? new Map()),
+          routeTypes: sortIndexedCountItems(userRoutes.get(row.userKey) ?? new Map()),
+          sessions,
+        };
+      })
+      .sort((a, b) => {
+        if (a.requestCount !== b.requestCount) return b.requestCount - a.requestCount;
+        return Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt);
+      });
+
+    return {
+      from: new Date(query.fromMs).toISOString(),
+      to: new Date(query.toMs).toISOString(),
+      summary: {
+        totalRequests: Number(summaryRow.totalRequests) || 0,
+        metadataRequests: Number(summaryRow.metadataRequests) || 0,
+        uniqueUsers: Number(summaryRow.uniqueUsers) || 0,
+        uniqueSessions: Number(summaryRow.uniqueSessions) || 0,
+      },
+      users,
+      queryMs: Math.round((performance.now() - startedAt) * 100) / 100,
     };
   }
 
@@ -1346,6 +1670,70 @@ export async function queryIndexedLogEvents(
         fallbackReason: err instanceof Error ? err.message : String(err),
         statsMode: 'none',
       }),
+    };
+  }
+}
+
+export async function queryIndexedLogSessions(
+  logConfig: LogConfig | undefined,
+  query: IndexedLogSessionsQuery
+): Promise<IndexedLogSessionsResult | null> {
+  if (!logConfig || logConfig.enabled === false) {
+    return {
+      from: new Date(query.fromMs).toISOString(),
+      to: new Date(query.toMs).toISOString(),
+      summary: { totalRequests: 0, metadataRequests: 0, uniqueUsers: 0, uniqueSessions: 0 },
+      users: [],
+      meta: {
+        scannedFiles: 0,
+        scannedLines: 0,
+        parseErrors: 0,
+        truncated: false,
+        indexUsed: true,
+        indexFresh: true,
+        queryMs: 0,
+      },
+    };
+  }
+
+  const baseDir = resolveLogBaseDir(logConfig);
+  const index = getLogIndex(baseDir);
+  if (!index) return null;
+
+  try {
+    const freshness = await index.ensureRangeIndexed(query.fromMs, query.toMs);
+    const result = index.querySessions(query);
+    return {
+      from: result.from,
+      to: result.to,
+      summary: result.summary,
+      users: result.users,
+      meta: {
+        scannedFiles: freshness.scannedFiles,
+        scannedLines: freshness.scannedLines,
+        parseErrors: freshness.parseErrors,
+        truncated: false,
+        indexUsed: true,
+        indexFresh: true,
+        queryMs: result.queryMs,
+      },
+    };
+  } catch (err) {
+    return {
+      from: new Date(query.fromMs).toISOString(),
+      to: new Date(query.toMs).toISOString(),
+      summary: { totalRequests: 0, metadataRequests: 0, uniqueUsers: 0, uniqueSessions: 0 },
+      users: [],
+      meta: {
+        scannedFiles: 0,
+        scannedLines: 0,
+        parseErrors: 0,
+        truncated: false,
+        indexUsed: false,
+        indexFresh: false,
+        queryMs: 0,
+        fallbackReason: err instanceof Error ? err.message : String(err),
+      },
     };
   }
 }

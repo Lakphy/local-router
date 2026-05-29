@@ -307,6 +307,10 @@ export interface LogSessionsResponse {
     scannedLines: number;
     parseErrors: number;
     truncated: boolean;
+    indexUsed?: boolean;
+    indexFresh?: boolean;
+    queryMs?: number;
+    fallbackReason?: string;
   };
 }
 
