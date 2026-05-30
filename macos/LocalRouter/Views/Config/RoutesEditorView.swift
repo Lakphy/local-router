@@ -1,6 +1,10 @@
 import SwiftUI
 
 struct RoutesEditorView: View {
+    /// When true, prevents the first model-alias TextField from grabbing the
+    /// window's initial first responder (used on the dashboard homepage).
+    var disableInitialFocus = false
+
     @Environment(ConfigStore.self) private var configStore
     @State private var newRouteType = ""
     @State private var showDeleteAlert = false
@@ -75,6 +79,11 @@ struct RoutesEditorView: View {
             }
         } message: {
             Text("确定要删除协议入口「\(routeTypeToDelete)」及其所有路由规则吗？")
+        }
+        .background {
+            if disableInitialFocus {
+                InitialFocusClearer()
+            }
         }
     }
 

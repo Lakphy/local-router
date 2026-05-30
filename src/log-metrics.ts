@@ -3,21 +3,11 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { LogConfig } from './config';
 import { resolveLogBaseDir } from './config';
+import { extractTokenUsageSummaryFromLogEvent, type TokenUsageLogEventLike } from './token-usage';
 
 export type LogMetricsWindow = '1h' | '6h' | '24h';
 
-interface LogEventTokenUsageForMetrics {
-  inputTokens?: number | null;
-  outputTokens?: number | null;
-  totalTokens?: number | null;
-  cachedInputTokens?: number | null;
-  cacheHitInputTokens?: number | null;
-  cacheHitRateDenominatorTokens?: number | null;
-  reasoningTokens?: number | null;
-  cost?: number | null;
-}
-
-interface LogEventForMetrics {
+type LogEventForMetrics = TokenUsageLogEventLike & {
   ts_start?: string;
   latency_ms?: number;
   upstream_status?: number;
@@ -27,8 +17,7 @@ interface LogEventForMetrics {
   response_bytes?: number | null;
   stream_bytes?: number | null;
   error_type?: string | null;
-  token_usage?: LogEventTokenUsageForMetrics | null;
-}
+};
 
 interface AggregateRow {
   requests: number;
@@ -402,7 +391,10 @@ export async function getLogMetrics(options: {
 
         statusClasses[getStatusClass(event)] += 1;
 
-        const usage = event.token_usage;
+        // Token usage is not stored inline on the event; it is extracted
+        // lazily from the response body / stream file (same as the log query
+        // scan path). Bounded by MAX_LINES_SCANNED above.
+        const usage = extractTokenUsageSummaryFromLogEvent(event, { baseDir });
         if (usage) {
           tokenUsageCount += 1;
           tokenInput += Math.max(0, usage.inputTokens ?? 0);

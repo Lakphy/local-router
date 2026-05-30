@@ -52,7 +52,7 @@ struct RouteConfigCard: View {
                 .disabled(!configStore.isDirty || busy)
             }
 
-            RoutesEditorView()
+            RoutesEditorView(disableInitialFocus: true)
         }
         .padding(DS.gapM)
         .frame(maxWidth: .infinity, alignment: .leading)
