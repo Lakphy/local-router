@@ -1,27 +1,16 @@
 import { CliError } from '../errors';
-import { emitDiagnostic, emitResult, startStream } from '../output';
-import { checkHealth, cleanupIfStale } from '../process';
+import { emitDiagnostic, emitResult, type OutputContext, startStream } from '../output';
 import { defineSchemaCommand } from '../registry';
 import { renderCodeBlock, renderKv, renderTable } from '../render-md';
-import { readRuntimeState } from '../runtime';
+import { requireTarget } from '../target';
 
 interface RunningState {
   baseUrl: string;
 }
 
-async function requireRunning(): Promise<RunningState> {
-  await cleanupIfStale();
-  const state = readRuntimeState();
-  if (!state) {
-    throw new CliError('SERVICE_NOT_RUNNING', '日志查询需要服务运行', {
-      hint: '`local-router start --daemon`',
-    });
-  }
-  const ok = await checkHealth(state.baseUrl);
-  if (!ok) {
-    throw new CliError('HEALTH_FAILED', `服务健康检查失败: ${state.baseUrl}`);
-  }
-  return { baseUrl: state.baseUrl };
+async function requireRunning(ctx: OutputContext): Promise<RunningState> {
+  const t = await requireTarget(ctx);
+  return { baseUrl: t.baseUrl };
 }
 
 async function fetchJson(
@@ -94,7 +83,7 @@ defineSchemaCommand<EventsFlags>({
     { name: 'cursor', type: 'string', description: '分页游标' },
   ],
   fn: async ({ values, ctx }) => {
-    const { baseUrl } = await requireRunning();
+    const { baseUrl } = await requireRunning(ctx);
     const params = new URLSearchParams();
     const set = (k: string, v: unknown) => {
       if (v !== undefined && v !== null && v !== '' && v !== false) {
@@ -190,14 +179,15 @@ defineSchemaCommand<EventFlags>({
   fn: async ({ values, positionals, ctx }) => {
     const id = positionals[0];
     if (!id) throw new CliError('USAGE_ERROR', '用法: logs event <id>');
-    const { baseUrl } = await requireRunning();
+    const { baseUrl } = await requireRunning(ctx);
     const params = new URLSearchParams();
     if (values['include-stream']) params.set('includeStream', 'true');
     const { status, json } = await fetchJson(
       `${baseUrl}/api/logs/events/${encodeURIComponent(id)}?${params.toString()}`
     );
     if (status === 404) throw new CliError('ROUTE_NOT_FOUND', `事件不存在: ${id}`);
-    if (status !== 200) throw new CliError('UNKNOWN_ERROR', `查询失败: ${status}`, { details: json });
+    if (status !== 200)
+      throw new CliError('UNKNOWN_ERROR', `查询失败: ${status}`, { details: json });
     const detail = json as {
       summary: Record<string, unknown>;
       request: Record<string, unknown>;
@@ -246,12 +236,13 @@ defineSchemaCommand<WindowFlags>({
     },
   ],
   fn: async ({ values, ctx }) => {
-    const { baseUrl } = await requireRunning();
+    const { baseUrl } = await requireRunning(ctx);
     const w = values.window ?? '24h';
     const { status, json } = await fetchJson(
       `${baseUrl}/api/logs/events?window=${w}&hasError=true&limit=1&sort=time_desc`
     );
-    if (status !== 200) throw new CliError('UNKNOWN_ERROR', `查询失败: ${status}`, { details: json });
+    if (status !== 200)
+      throw new CliError('UNKNOWN_ERROR', `查询失败: ${status}`, { details: json });
     const data = json as { items: Array<Record<string, unknown>> };
     if (data.items.length === 0) {
       emitResult(ctx, {
@@ -300,7 +291,7 @@ defineSchemaCommand<WindowFlags>({
     },
   ],
   fn: async ({ values, ctx }) => {
-    const { baseUrl } = await requireRunning();
+    const { baseUrl } = await requireRunning(ctx);
     const w = values.window ?? '24h';
     const { status, json } = await fetchJson(`${baseUrl}/api/metrics/logs?window=${w}`);
     if (status !== 200) {
@@ -364,7 +355,7 @@ defineSchemaCommand({
   supportsJson: true,
   requiresRunning: true,
   fn: async ({ ctx }) => {
-    const { baseUrl } = await requireRunning();
+    const { baseUrl } = await requireRunning(ctx);
     const { status, json } = await fetchJson(`${baseUrl}/api/logs/storage`);
     if (status !== 200) {
       throw new CliError('UNKNOWN_ERROR', `获取 storage 失败: ${status}`, { details: json });
@@ -400,7 +391,7 @@ defineSchemaCommand<SessionsFlags>({
     { name: 'limit', type: 'number', default: 50, description: '最大 session 数' },
   ],
   fn: async ({ values, ctx }) => {
-    const { baseUrl } = await requireRunning();
+    const { baseUrl } = await requireRunning(ctx);
     const params = new URLSearchParams();
     params.set('window', values.window ?? '24h');
     if (values.user) params.set('user', values.user);
@@ -412,7 +403,10 @@ defineSchemaCommand<SessionsFlags>({
     emitResult(ctx, {
       command: 'logs.sessions',
       data: json,
-      md: { heading: 'logs.sessions', data: renderCodeBlock(JSON.stringify(json, null, 2), 'json') },
+      md: {
+        heading: 'logs.sessions',
+        data: renderCodeBlock(JSON.stringify(json, null, 2), 'json'),
+      },
     });
   },
 });
@@ -423,7 +417,7 @@ defineSchemaCommand({
   supportsJson: true,
   requiresRunning: true,
   fn: async ({ ctx }) => {
-    const { baseUrl } = await requireRunning();
+    const { baseUrl } = await requireRunning(ctx);
     const stream = startStream(ctx, 'logs.tail');
     const res = await fetch(`${baseUrl}/api/logs/tail`, {
       headers: { accept: 'text/event-stream' },
@@ -489,8 +483,8 @@ defineSchemaCommand<ExportFlags>({
     { name: 'from', type: 'string', description: 'ISO 起点' },
     { name: 'to', type: 'string', description: 'ISO 终点' },
   ],
-  fn: async ({ values }) => {
-    const { baseUrl } = await requireRunning();
+  fn: async ({ values, ctx }) => {
+    const { baseUrl } = await requireRunning(ctx);
     const params = new URLSearchParams();
     params.set('format', values.format ?? 'jsonl');
     params.set('window', values.window ?? '24h');
@@ -521,7 +515,7 @@ defineSchemaCommand<ReplayFlags>({
   fn: async ({ values, positionals, ctx }) => {
     const id = positionals[0];
     if (!id) throw new CliError('USAGE_ERROR', '用法: logs replay <event-id>');
-    const { baseUrl } = await requireRunning();
+    const { baseUrl } = await requireRunning(ctx);
     const detailRes = await fetchJson(`${baseUrl}/api/logs/events/${encodeURIComponent(id)}`);
     if (detailRes.status === 404) throw new CliError('ROUTE_NOT_FOUND', `事件不存在: ${id}`);
     if (detailRes.status !== 200) {

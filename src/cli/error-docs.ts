@@ -100,6 +100,16 @@ export const ERROR_DOCS: Record<CliErrorCode, Omit<ErrorDoc, 'code' | 'exitCode'
     cause: '命令缺少必填 flag，本应弹出选择器但当前 stdin 不是 TTY 或显式 `--no-interactive`。',
     fix: '在错误的 `details` 里查看候选项，显式补 `--provider/--model` 等。',
   },
+  TARGET_NOT_FOUND: {
+    summary: '找不到可连接的 local-router',
+    cause: '默认端口 4099 上没有 local-router，OS 进程枚举也未发现其它实例。',
+    fix: '`local-router start` 启动；或用 `--port <port>` / `--url <url>` 指定目标。',
+  },
+  TARGET_UNREACHABLE: {
+    summary: '指定的目标无法连通',
+    cause: '`--port` / `--url`（或环境变量）指向的地址没有响应 `/api/health` 或不是 local-router。',
+    fix: '确认目标端口/地址正确且 local-router 正在该地址监听。',
+  },
   UNKNOWN_ERROR: {
     summary: '未知错误',
     cause: '没有匹配到任何 CliError 类型。',

@@ -5,9 +5,8 @@
 import { createInterface } from 'node:readline/promises';
 import { CliError } from '../errors';
 import { emitDiagnostic } from '../output';
-import { checkHealth, cleanupIfStale } from '../process';
 import { defineSchemaCommand } from '../registry';
-import { readRuntimeState } from '../runtime';
+import { requireTarget } from '../target';
 
 interface ChatFlags {
   entry: string;
@@ -40,18 +39,13 @@ defineSchemaCommand<ChatFlags>({
     { name: 'no-stream', type: 'boolean', description: '禁用流式（一次返回）' },
   ],
   fn: async ({ values, ctx }) => {
-    await cleanupIfStale();
-    const state = readRuntimeState();
-    if (!state) throw new CliError('SERVICE_NOT_RUNNING', '服务未运行');
-    if (!(await checkHealth(state.baseUrl))) {
-      throw new CliError('HEALTH_FAILED', `服务健康检查失败: ${state.baseUrl}`);
-    }
     if (!process.stdin.isTTY) {
       throw new CliError('INTERACTIVE_REQUIRED', 'chat 需要 TTY', {
         hint: '管道场景请用 `local-router try`',
       });
     }
-    const baseUrl = state.baseUrl.replace(/\/+$/, '');
+    const target = await requireTarget(ctx);
+    const baseUrl = target.baseUrl.replace(/\/+$/, '');
     const url = `${baseUrl}/openai-completions/v1/chat/completions`;
     const messages: ChatMessage[] = [];
     if (values.system) messages.push({ role: 'system', content: values.system });

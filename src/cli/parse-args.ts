@@ -3,6 +3,14 @@ import { CliError } from './errors';
 import type { CommandDef, CommandFlag } from './registry';
 
 /**
+ * Global client-target flags (see global-flags.ts). They are recorded into
+ * flags.target before dispatch but left in argv, so every command parser must
+ * tolerate them (as value-taking options) even when it doesn't declare them.
+ * Commands that DO declare them (e.g. `start --port`) keep their own spec.
+ */
+const GLOBAL_TARGET_FLAG_NAMES = ['url', 'host', 'port'];
+
+/**
  * Map a CommandFlag to node:util parseArgs option spec. Numbers/enums are
  * still parsed as strings at this layer; conversion happens in normalize().
  */
@@ -75,6 +83,11 @@ export interface ParsedCommandArgs<TValues = Record<string, unknown>> {
  */
 export function parseCommandArgs(def: CommandDef, args: string[]): ParsedCommandArgs {
   const options = toParseArgsOptions(def.flags);
+  // Tolerate global client-target flags the command doesn't declare, so they
+  // are consumed as values (not stray positionals) and don't trip did-you-mean.
+  for (const g of GLOBAL_TARGET_FLAG_NAMES) {
+    if (!(g in options)) options[g] = { type: 'string' };
+  }
   let parsed: ReturnType<typeof nodeParseArgs>;
   try {
     parsed = nodeParseArgs({
@@ -88,7 +101,7 @@ export function parseCommandArgs(def: CommandDef, args: string[]): ParsedCommand
   }
 
   // Detect unknown long flags and offer did-you-mean.
-  const known = new Set(def.flags?.map((f) => f.name) ?? []);
+  const known = new Set([...(def.flags?.map((f) => f.name) ?? []), ...GLOBAL_TARGET_FLAG_NAMES]);
   for (const a of args) {
     if (!a.startsWith('--')) continue;
     const name = a.slice(2).split('=')[0];

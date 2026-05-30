@@ -17,6 +17,8 @@ export type CliErrorCode =
   | 'UPSTREAM_UNREACHABLE'
   | 'TIMEOUT'
   | 'INTERACTIVE_REQUIRED'
+  | 'TARGET_NOT_FOUND'
+  | 'TARGET_UNREACHABLE'
   | 'UNKNOWN_ERROR';
 
 const EXIT_CODES: Record<CliErrorCode, number> = {
@@ -38,6 +40,8 @@ const EXIT_CODES: Record<CliErrorCode, number> = {
   APPLY_FAILED: 8,
   UPSTREAM_UNREACHABLE: 9,
   INTERACTIVE_REQUIRED: 10,
+  TARGET_NOT_FOUND: 3,
+  TARGET_UNREACHABLE: 9,
   UNKNOWN_ERROR: 1,
 };
 

@@ -11,6 +11,8 @@ export interface GlobalFlags {
   yes: boolean;
   /** When true, hints/explanations are amplified for AI agents. */
   explain: boolean;
+  /** Explicit server target for client commands (resolved by resolveTarget). */
+  target?: { url?: string; host?: string; port?: number };
 }
 
 const VALID_OUTPUTS: OutputFormat[] = ['markdown', 'json', 'ndjson', 'text'];
@@ -43,6 +45,9 @@ export function extractGlobalFlags(args: string[]): { flags: GlobalFlags; rest: 
   let yes = false;
   let jsonAlias = false;
   let explain = false;
+  let targetUrl: string | undefined;
+  let targetHost: string | undefined;
+  let targetPortRaw: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -89,6 +94,24 @@ export function extractGlobalFlags(args: string[]): { flags: GlobalFlags; rest: 
       explain = true;
       continue;
     }
+    // Client-target flags are recorded but LEFT in argv (pushed to rest), so
+    // commands that declare their own --port/--host (start, provider add-lan)
+    // still parse them. We only peek the value here.
+    if (a === '--url' || a.startsWith('--url=')) {
+      targetUrl = a.startsWith('--url=') ? a.slice('--url='.length) : args[i + 1];
+      rest.push(a);
+      continue;
+    }
+    if (a === '--host' || a.startsWith('--host=')) {
+      targetHost = a.startsWith('--host=') ? a.slice('--host='.length) : args[i + 1];
+      rest.push(a);
+      continue;
+    }
+    if (a === '--port' || a.startsWith('--port=')) {
+      targetPortRaw = a.startsWith('--port=') ? a.slice('--port='.length) : args[i + 1];
+      rest.push(a);
+      continue;
+    }
     rest.push(a);
   }
 
@@ -108,6 +131,20 @@ export function extractGlobalFlags(args: string[]): { flags: GlobalFlags; rest: 
     output = envFormat ?? 'markdown';
   }
 
+  let targetPort: number | undefined;
+  if (targetPortRaw !== undefined) {
+    targetPort = Number.parseInt(targetPortRaw, 10);
+    if (!Number.isFinite(targetPort) || targetPort <= 0 || targetPort > 65535) {
+      throw new CliError('USAGE_ERROR', `无效端口: ${targetPortRaw}`, {
+        hint: '端口范围 1-65535',
+      });
+    }
+  }
+  const target =
+    targetUrl !== undefined || targetHost !== undefined || targetPort !== undefined
+      ? { url: targetUrl, host: targetHost, port: targetPort }
+      : undefined;
+
   return {
     flags: {
       output,
@@ -117,6 +154,7 @@ export function extractGlobalFlags(args: string[]): { flags: GlobalFlags; rest: 
       noInteractive: noInteractive || process.env.LOCAL_ROUTER_NO_INTERACTIVE === '1',
       yes,
       explain: explain || process.env.LOCAL_ROUTER_EXPLAIN === '1',
+      target,
     },
     rest,
   };

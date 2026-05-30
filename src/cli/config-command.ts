@@ -7,9 +7,9 @@ import { type ApplyResult, applyConfigChange } from './config-apply';
 import { CliError } from './errors';
 import type { GlobalFlags } from './global-flags';
 import { emitResult, runCommand } from './output';
-import { checkHealth, cleanupIfStale } from './process';
+import { checkHealth } from './process';
 import { renderCodeBlock, renderKv, renderTable } from './render-md';
-import { readRuntimeState } from './runtime';
+import { requireTarget } from './target';
 
 function readConfig(configArg?: string): { path: string; config: AppConfig } {
   const path = resolveConfigPath(configArg);
@@ -1043,32 +1043,26 @@ async function handleApply(args: string[], flags: GlobalFlags): Promise<number> 
     command: 'config.apply',
     flags,
     fn: async (ctx) => {
-      await cleanupIfStale();
-      const state = readRuntimeState();
-      if (!state) {
-        throw new CliError('SERVICE_NOT_RUNNING', '服务未运行，无法 apply', {
-          hint: '启动: `local-router start --daemon`',
-        });
-      }
-      const res = await fetch(`${state.baseUrl}/api/config/apply`, { method: 'POST' });
+      const target = await requireTarget(ctx);
+      const res = await fetch(`${target.baseUrl}/api/config/apply`, { method: 'POST' });
       if (!res.ok) {
         const text = await res.text();
         throw new CliError('APPLY_FAILED', `apply 失败: ${res.status} ${text}`, {
-          details: { status: res.status, baseUrl: state.baseUrl },
+          details: { status: res.status, baseUrl: target.baseUrl },
         });
       }
-      const healthy = await checkHealth(state.baseUrl);
+      const healthy = await checkHealth(target.baseUrl);
       if (!healthy) {
-        throw new CliError('HEALTH_FAILED', `apply 后健康检查失败: ${state.baseUrl}`);
+        throw new CliError('HEALTH_FAILED', `apply 后健康检查失败: ${target.baseUrl}`);
       }
       emitResult(ctx, {
         command: 'config.apply',
-        data: { ok: true, baseUrl: state.baseUrl },
+        data: { ok: true, baseUrl: target.baseUrl },
         md: {
           heading: 'config.apply · ✓',
-          data: `已应用: \`${state.baseUrl}\``,
+          data: `已应用: \`${target.baseUrl}\``,
         },
-        text: `配置已应用: ${state.baseUrl}`,
+        text: `配置已应用: ${target.baseUrl}`,
       });
       void args;
     },

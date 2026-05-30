@@ -10,11 +10,11 @@ import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadConfig, resolveConfigPath, resolveLogBaseDir } from '../../config';
 import { CliError } from '../errors';
-import { emitResult } from '../output';
-import { checkHealth, cleanupIfStale } from '../process';
+import { emitResult, type OutputContext } from '../output';
 import { defineSchemaCommand } from '../registry';
 import { renderCodeBlock, renderKv, renderTable } from '../render-md';
 import { readRuntimeState } from '../runtime';
+import { requireTarget } from '../target';
 
 async function fetchJson(url: string): Promise<{ status: number; json: unknown }> {
   const res = await fetch(url);
@@ -26,14 +26,9 @@ async function fetchJson(url: string): Promise<{ status: number; json: unknown }
   return { status: res.status, json };
 }
 
-async function requireBaseUrl(): Promise<string> {
-  await cleanupIfStale();
-  const state = readRuntimeState();
-  if (!state) throw new CliError('SERVICE_NOT_RUNNING', '服务未运行');
-  if (!(await checkHealth(state.baseUrl))) {
-    throw new CliError('HEALTH_FAILED', `服务健康检查失败: ${state.baseUrl}`);
-  }
-  return state.baseUrl;
+async function requireBaseUrl(ctx: OutputContext): Promise<string> {
+  const t = await requireTarget(ctx);
+  return t.baseUrl;
 }
 
 // ─── logs tokens ─────────────────────────────────────────────────────────────
@@ -57,7 +52,7 @@ defineSchemaCommand<TokensFlags>({
     },
   ],
   fn: async ({ values, ctx }) => {
-    const baseUrl = await requireBaseUrl();
+    const baseUrl = await requireBaseUrl(ctx);
     const { status, json } = await fetchJson(
       `${baseUrl}/api/logs/events?window=${values.window}&limit=1`
     );
@@ -134,11 +129,12 @@ defineSchemaCommand<CostFlags>({
     {
       name: 'rate-table',
       type: 'string',
-      description: 'JSON：{ "<provider/model>": { inputPerMillion, outputPerMillion, cachedInputPerMillion } }',
+      description:
+        'JSON：{ "<provider/model>": { inputPerMillion, outputPerMillion, cachedInputPerMillion } }',
     },
   ],
   fn: async ({ values, ctx }) => {
-    const baseUrl = await requireBaseUrl();
+    const baseUrl = await requireBaseUrl(ctx);
     let rateTable: Record<string, RateEntry> = {};
     if (values['rate-table']) {
       try {

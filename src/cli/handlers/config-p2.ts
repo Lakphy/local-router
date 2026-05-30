@@ -15,7 +15,7 @@ import { CliError } from '../errors';
 import { emitResult } from '../output';
 import { defineSchemaCommand } from '../registry';
 import { renderCodeBlock, renderKv } from '../render-md';
-import { readRuntimeState } from '../runtime';
+import { guessTargetUrl, resolveTarget } from '../target';
 
 // ─── config edit ─────────────────────────────────────────────────────────────
 
@@ -36,7 +36,10 @@ defineSchemaCommand<ConfigEditFlags>({
   ],
   fn: ({ values, ctx }) => {
     const editor =
-      values.editor ?? process.env.VISUAL ?? process.env.EDITOR ?? (process.platform === 'win32' ? 'notepad' : 'vi');
+      values.editor ??
+      process.env.VISUAL ??
+      process.env.EDITOR ??
+      (process.platform === 'win32' ? 'notepad' : 'vi');
     if (!process.stdin.isTTY) {
       throw new CliError('INTERACTIVE_REQUIRED', 'config edit 需要 TTY', {
         hint: '管道场景请用 `local-router config patch` 或 `config import`',
@@ -55,7 +58,10 @@ defineSchemaCommand<ConfigEditFlags>({
       copyFileSync(path, tmpFile);
       const result = spawnSync(editor, [tmpFile], { stdio: 'inherit' });
       if (result.error || (typeof result.status === 'number' && result.status !== 0)) {
-        throw new CliError('UNKNOWN_ERROR', `编辑器退出异常: ${result.error?.message ?? result.status}`);
+        throw new CliError(
+          'UNKNOWN_ERROR',
+          `编辑器退出异常: ${result.error?.message ?? result.status}`
+        );
       }
       let edited;
       try {
@@ -81,7 +87,9 @@ defineSchemaCommand<ConfigEditFlags>({
       });
     } finally {
       if (!keepTmp) {
-        try { rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+        try {
+          rmSync(tmpDir, { recursive: true, force: true });
+        } catch {}
       }
     }
   },
@@ -107,7 +115,10 @@ function platformOpen(target: string): { ok: boolean; cmd: string } {
     args = [target];
   }
   const r = spawnSync(cmd, args, { stdio: 'ignore' });
-  return { ok: !r.error && (typeof r.status !== 'number' || r.status === 0), cmd: `${cmd} ${args.join(' ')}` };
+  return {
+    ok: !r.error && (typeof r.status !== 'number' || r.status === 0),
+    cmd: `${cmd} ${args.join(' ')}`,
+  };
 }
 
 defineSchemaCommand<OpenFlags>({
@@ -122,7 +133,7 @@ defineSchemaCommand<OpenFlags>({
     },
   ],
   flags: [{ name: 'config', type: 'string', description: '配置文件路径' }],
-  fn: ({ positionals, values, ctx }) => {
+  fn: async ({ positionals, values, ctx }) => {
     const target = positionals[0];
     if (!target) {
       throw new CliError('USAGE_ERROR', '用法: open <admin|docs|logs-dir|config>');
@@ -130,13 +141,8 @@ defineSchemaCommand<OpenFlags>({
     let url: string;
     let label: string;
     if (target === 'admin') {
-      const state = readRuntimeState();
-      if (!state) {
-        throw new CliError('SERVICE_NOT_RUNNING', '服务未运行，无法打开 admin', {
-          hint: '`local-router start --daemon`',
-        });
-      }
-      url = `${state.baseUrl}/admin/`;
+      const resolved = await resolveTarget(ctx.flags);
+      url = `${resolved.baseUrl}/admin/`;
       label = 'Web Admin';
     } else if (target === 'docs') {
       url = 'https://github.com/lakphy/local-router#readme';
@@ -197,8 +203,9 @@ defineSchemaCommand<EnvFlags>({
     { name: 'config', type: 'string', description: '配置文件路径' },
   ],
   fn: ({ values, ctx }) => {
-    const state = readRuntimeState();
-    const baseUrl = state?.baseUrl ?? 'http://127.0.0.1:4099';
+    const guess = guessTargetUrl(ctx.flags);
+    const baseUrl = guess.baseUrl;
+    const running = guess.running;
     const entries: Array<{ key: string; value: string; desc: string }> = [
       {
         key: 'OPENAI_BASE_URL',
@@ -238,12 +245,12 @@ defineSchemaCommand<EnvFlags>({
       data: {
         baseUrl,
         shell: values.shell,
-        running: !!state,
+        running,
         entries,
         script,
       },
       md: {
-        heading: `env · ${state ? '✓ 运行中' : '✗ 未运行（使用默认 4099）'}`,
+        heading: `env · ${running ? '✓ 运行中' : '✗ 未运行（使用默认 4099）'}`,
         meta: [`baseUrl: \`${baseUrl}\``],
         data: [
           renderKv(entries.map((e) => ({ key: e.key, value: e.value }))),

@@ -8,6 +8,7 @@ import { checkHealth, cleanupIfStale, readLogDelta } from '../process';
 import { defineSchemaCommand } from '../registry';
 import { renderKv } from '../render-md';
 import { getRuntimeFiles, readRuntimeState, resolveConfigArgPath } from '../runtime';
+import { guessTargetUrl } from '../target';
 import { waitFor } from '../wait';
 
 function fmtUptime(seconds: number): string {
@@ -229,32 +230,34 @@ defineSchemaCommand<HealthFlags>({
   fn: async ({ values, ctx }) => {
     const retry = Math.max(1, values.retry || 1);
     const interval = Math.max(0, values['retry-interval'] || 1);
-    await cleanupIfStale();
-    const state = readRuntimeState();
-    if (!state) {
-      throw new CliError('SERVICE_NOT_RUNNING', '服务未运行', {
-        hint: '启动: `local-router start --daemon`',
-      });
-    }
+    const target = guessTargetUrl(ctx.flags);
+    const baseUrl = target.baseUrl;
     let ok = false;
     for (let i = 0; i < retry; i++) {
-      ok = await checkHealth(state.baseUrl);
+      ok = await checkHealth(baseUrl);
       if (ok) break;
       if (i < retry - 1) await sleep(interval * 1000);
     }
     if (!ok) {
-      throw new CliError('HEALTH_FAILED', `健康检查失败: ${state.baseUrl}/api/health`, {
-        details: { baseUrl: state.baseUrl, retries: retry },
+      // No owned daemon and no explicit target → it's "not running", not a
+      // health failure of a known instance. Preserve the actionable hint/exit.
+      if (!target.running && !ctx.flags.target) {
+        throw new CliError('SERVICE_NOT_RUNNING', '服务未运行', {
+          hint: '启动: `local-router start --daemon`',
+        });
+      }
+      throw new CliError('HEALTH_FAILED', `健康检查失败: ${baseUrl}/api/health`, {
+        details: { baseUrl, retries: retry },
       });
     }
     emitResult(ctx, {
       command: 'health',
-      data: { ok: true, baseUrl: state.baseUrl },
+      data: { ok: true, baseUrl },
       md: {
         heading: 'health · ✓ ok',
-        meta: [`地址 ${state.baseUrl}`],
+        meta: [`地址 ${baseUrl}`],
       },
-      text: `健康检查通过: ${state.baseUrl}`,
+      text: `健康检查通过: ${baseUrl}`,
     });
   },
 });

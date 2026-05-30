@@ -7,6 +7,7 @@ import { checkHealth, cleanupIfStale } from '../process';
 import { defineSchemaCommand } from '../registry';
 import { renderCodeBlock, renderKv, renderTable } from '../render-md';
 import { readRuntimeState } from '../runtime';
+import { requireTarget } from '../target';
 
 interface DoctorCheck {
   name: string;
@@ -342,14 +343,8 @@ defineSchemaCommand<TryFlags>({
   fn: async ({ values, ctx }) => {
     const { entry, model, prompt, stream: streamMode, timeout: timeoutSec } = values;
 
-    await cleanupIfStale();
-    const state = readRuntimeState();
-    if (!state) {
-      throw new CliError('SERVICE_NOT_RUNNING', '服务未运行', {
-        hint: '`local-router start --daemon`',
-      });
-    }
-    const payload = buildTryPayload(entry, model, prompt, state.baseUrl);
+    const target = await requireTarget(ctx);
+    const payload = buildTryPayload(entry, model, prompt, target.baseUrl);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutSec * 1000);
     const startedAt = Date.now();

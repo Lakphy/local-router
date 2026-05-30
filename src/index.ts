@@ -8,6 +8,7 @@ import { streamText } from 'ai';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
+import { readVersionString } from './cli/asset-paths';
 import { createAutostartManager, getAutostartExecArgs } from './cli/autostart';
 import type { AppConfig, RouteTarget } from './config';
 import { parseConfigPath, resolveLogBaseDir } from './config';
@@ -264,7 +265,8 @@ function createAdminApiRoutes(
   pluginManager: PluginManager,
   registerCleanup?: (cleanup: CleanupFn) => void,
   serverControl?: ServerControl,
-  restartLogStorageTask?: (logConfig: AppConfig['log']) => void
+  restartLogStorageTask?: (logConfig: AppConfig['log']) => void,
+  serviceVersion?: string
 ): Hono {
   const api = new Hono();
   const cryptoSessions = new Map<string, { session: CryptoSession; createdAt: number }>();
@@ -312,7 +314,16 @@ function createAdminApiRoutes(
     cryptoSessions.clear();
   });
 
-  api.get('/health', (c) => c.json({ status: 'ok', service: 'local-router' }));
+  api.get('/health', (c) => {
+    const addr = serverControl?.current ?? readRestartCriticalServerFields(store.get());
+    return c.json({
+      status: 'ok',
+      service: 'local-router',
+      version: serviceVersion ?? 'unknown',
+      host: addr.host,
+      port: addr.port,
+    });
+  });
 
   // --- 加密握手 ---
   api.post('/crypto/handshake', async (c) => {
@@ -1135,6 +1146,7 @@ export async function createApp(
   }
 ): Promise<Hono> {
   const config = store.get();
+  const serviceVersion = await readVersionString();
   console.log(`已加载配置: ${store.getPath()}`);
 
   if (config.log) {
@@ -1189,7 +1201,8 @@ export async function createApp(
       pluginManager,
       options?.registerCleanup,
       options?.serverControl,
-      restartLogStorageTask
+      restartLogStorageTask,
+      serviceVersion
     )
   );
   console.log('已注册管理 API: /api');

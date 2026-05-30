@@ -14,6 +14,7 @@ import './cli/handlers/logs';
 import './cli/handlers/logs-extra';
 import './cli/handlers/recipes';
 import './cli/handlers/server';
+import './cli/handlers/target';
 import { createOutputContext, emitError, emitResult, runCommand } from './cli/output';
 import { nearest } from './cli/parse-args';
 import {
