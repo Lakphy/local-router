@@ -1,6 +1,5 @@
 import { BarChart3 } from 'lucide-react';
 import { DashboardPanel } from '@/components/dashboard/panel';
-import { Button } from '@/components/ui/button';
 import {
   Empty,
   EmptyDescription,
@@ -16,11 +15,10 @@ interface MetricsPanelProps {
   metricsError: string | null;
   metrics: LogMetricsResponse | null;
   metricsWindow: LogMetricsWindow;
-  onWindowChange: (window: LogMetricsWindow) => void;
 }
 
 export function MetricsPanel(props: MetricsPanelProps) {
-  const { metricsLoading, metricsError, metrics, metricsWindow, onWindowChange } = props;
+  const { metricsLoading, metricsError, metrics, metricsWindow } = props;
   const metricsSeries = metrics?.series.slice(-8) ?? [];
   const topProviders = metrics?.topProviders ?? [];
   const topRouteTypes = metrics?.topRouteTypes ?? [];
@@ -30,21 +28,7 @@ export function MetricsPanel(props: MetricsPanelProps) {
     <DashboardPanel
       title="运行指标（日志聚合）"
       description="基于事件日志窗口聚合的请求量、成功率与延迟分布"
-      action={
-        <div className="flex items-center gap-1">
-          {(['1h', '6h', '24h'] as const).map((window) => (
-            <Button
-              key={window}
-              size="xs"
-              variant={metricsWindow === window ? 'secondary' : 'ghost'}
-              onClick={() => onWindowChange(window)}
-              disabled={metricsLoading}
-            >
-              {window}
-            </Button>
-          ))}
-        </div>
-      }
+      action={<span className="text-xs text-muted-foreground">时间范围 {metricsWindow}</span>}
       contentClassName="space-y-3 px-3 py-2.5"
     >
       {metricsLoading ? (

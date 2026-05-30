@@ -53,11 +53,25 @@ struct LogMetricsResponse: Codable, Sendable {
     let generatedAt: String
     let source: MetricsSource
     let summary: MetricsSummary
+    let tokens: MetricsTokens?
     let series: [MetricsSeriesPoint]
     let topProviders: [MetricsTopItem]
     let topRouteTypes: [MetricsTopItem]
     let statusClasses: MetricsStatusClasses
     let warnings: [String]
+}
+
+struct MetricsTokens: Codable, Sendable {
+    let usageCount: Int
+    let inputTokens: Int
+    let outputTokens: Int
+    let totalTokens: Int
+    let cachedInputTokens: Int
+    let cacheHitInputTokens: Int
+    let cacheHitRateDenominatorTokens: Int
+    let cacheHitRate: Double
+    let reasoningTokens: Int
+    let cost: Double?
 }
 
 struct MetricsSource: Codable, Sendable {

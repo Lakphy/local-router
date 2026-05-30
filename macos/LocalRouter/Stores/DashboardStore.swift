@@ -2,8 +2,6 @@ import Foundation
 
 @Observable
 final class DashboardStore {
-    var isHealthy = false
-    var configMeta: ConfigMeta?
     var metrics: LogMetricsResponse?
     var logStorage: LogStorageInfo?
     var metricsWindow: MetricsWindow = .twentyFourHours
@@ -13,13 +11,9 @@ final class DashboardStore {
     func refresh(api: APIClient) async {
         loading = true
         error = nil
-        async let health = api.checkHealth()
-        async let meta = try? api.fetchConfigMeta()
         async let m = try? api.fetchLogMetrics(window: metricsWindow)
         async let storage = try? api.fetchLogStorage()
 
-        isHealthy = await health
-        configMeta = await meta
         metrics = await m
         logStorage = await storage
         loading = false

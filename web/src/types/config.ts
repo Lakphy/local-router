@@ -91,6 +91,18 @@ export interface LogMetricsResponse {
     totalRequestBytes: number;
     totalResponseBytes: number;
   };
+  tokens: {
+    usageCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    cachedInputTokens: number;
+    cacheHitInputTokens: number;
+    cacheHitRateDenominatorTokens: number;
+    cacheHitRate: number;
+    reasoningTokens: number;
+    cost: number | null;
+  };
   series: LogMetricsSeriesPoint[];
   topProviders: Array<{ key: string; requests: number; errorRate: number; avgLatencyMs: number }>;
   topRouteTypes: Array<{ key: string; requests: number; errorRate: number }>;

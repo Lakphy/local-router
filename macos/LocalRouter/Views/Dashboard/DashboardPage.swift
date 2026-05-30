@@ -8,6 +8,8 @@ struct DashboardPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: DS.gapL) {
                 OverviewStripView()
+                RouteConfigCard()
+                ClientConfigCard()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(DS.padPage)

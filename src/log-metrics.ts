@@ -6,6 +6,17 @@ import { resolveLogBaseDir } from './config';
 
 export type LogMetricsWindow = '1h' | '6h' | '24h';
 
+interface LogEventTokenUsageForMetrics {
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  totalTokens?: number | null;
+  cachedInputTokens?: number | null;
+  cacheHitInputTokens?: number | null;
+  cacheHitRateDenominatorTokens?: number | null;
+  reasoningTokens?: number | null;
+  cost?: number | null;
+}
+
 interface LogEventForMetrics {
   ts_start?: string;
   latency_ms?: number;
@@ -16,6 +27,7 @@ interface LogEventForMetrics {
   response_bytes?: number | null;
   stream_bytes?: number | null;
   error_type?: string | null;
+  token_usage?: LogEventTokenUsageForMetrics | null;
 }
 
 interface AggregateRow {
@@ -52,6 +64,18 @@ export interface LogMetricsResponse {
     p95LatencyMs: number;
     totalRequestBytes: number;
     totalResponseBytes: number;
+  };
+  tokens: {
+    usageCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    cachedInputTokens: number;
+    cacheHitInputTokens: number;
+    cacheHitRateDenominatorTokens: number;
+    cacheHitRate: number;
+    reasoningTokens: number;
+    cost: number | null;
   };
   series: LogMetricsSeriesPoint[];
   topProviders: Array<{ key: string; requests: number; errorRate: number; avgLatencyMs: number }>;
@@ -164,6 +188,18 @@ function createEmptyMetrics(
       totalRequestBytes: 0,
       totalResponseBytes: 0,
     },
+    tokens: {
+      usageCount: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      cachedInputTokens: 0,
+      cacheHitInputTokens: 0,
+      cacheHitRateDenominatorTokens: 0,
+      cacheHitRate: 0,
+      reasoningTokens: 0,
+      cost: null,
+    },
     series,
     topProviders: [],
     topRouteTypes: [],
@@ -263,6 +299,17 @@ export async function getLogMetrics(options: {
   let totalRequestBytes = 0;
   let totalResponseBytes = 0;
 
+  let tokenUsageCount = 0;
+  let tokenInput = 0;
+  let tokenOutput = 0;
+  let tokenTotal = 0;
+  let tokenCachedInput = 0;
+  let tokenCacheHitInput = 0;
+  let tokenCacheHitDenominator = 0;
+  let tokenReasoning = 0;
+  let tokenCost = 0;
+  let tokenCostSeen = false;
+
   const warnings: string[] = [];
   const dateStrings = listDateStrings(fromMs, nowMs);
 
@@ -354,6 +401,22 @@ export async function getLogMetrics(options: {
         routeTypeAgg.set(routeTypeKey, routeTypeRow);
 
         statusClasses[getStatusClass(event)] += 1;
+
+        const usage = event.token_usage;
+        if (usage) {
+          tokenUsageCount += 1;
+          tokenInput += Math.max(0, usage.inputTokens ?? 0);
+          tokenOutput += Math.max(0, usage.outputTokens ?? 0);
+          tokenTotal += Math.max(0, usage.totalTokens ?? 0);
+          tokenCachedInput += Math.max(0, usage.cachedInputTokens ?? 0);
+          tokenCacheHitInput += Math.max(0, usage.cacheHitInputTokens ?? 0);
+          tokenCacheHitDenominator += Math.max(0, usage.cacheHitRateDenominatorTokens ?? 0);
+          tokenReasoning += Math.max(0, usage.reasoningTokens ?? 0);
+          if (typeof usage.cost === 'number' && Number.isFinite(usage.cost)) {
+            tokenCost += usage.cost;
+            tokenCostSeen = true;
+          }
+        }
       }
     } catch (err) {
       warnings.push(
@@ -419,6 +482,18 @@ export async function getLogMetrics(options: {
       p95LatencyMs: percentile(latencies, 0.95),
       totalRequestBytes,
       totalResponseBytes,
+    },
+    tokens: {
+      usageCount: tokenUsageCount,
+      inputTokens: tokenInput,
+      outputTokens: tokenOutput,
+      totalTokens: tokenTotal,
+      cachedInputTokens: tokenCachedInput,
+      cacheHitInputTokens: tokenCacheHitInput,
+      cacheHitRateDenominatorTokens: tokenCacheHitDenominator,
+      cacheHitRate: toPercent(tokenCacheHitInput, tokenCacheHitDenominator),
+      reasoningTokens: tokenReasoning,
+      cost: tokenCostSeen ? Number(tokenCost.toFixed(6)) : null,
     },
     series,
     topProviders,
