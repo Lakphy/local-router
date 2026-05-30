@@ -118,6 +118,30 @@ final class APIClient {
         return json
     }
 
+    // MARK: - LAN Discovery
+
+    /// 直连局域网内其他 local-router，嗅探其某协议下可用的模型路由别名。
+    /// 不复用固定的 baseURL，而是直接请求对端的 http://<ip>:<port>/api/models。
+    func discoverRemoteModels(ip: String, port: Int, protocolType: ProviderType) async throws -> [String] {
+        guard let url = URL(string: "http://\(ip):\(port)/api/models?protocol=\(protocolType.rawValue)") else {
+            throw APIError.invalidURL
+        }
+        let (data, response) = try await session.data(from: url)
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            var message: String?
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                message = json["error"] as? String
+            }
+            throw APIError.httpError(status: http.statusCode, message: message)
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let models = json["models"] as? [String]
+        else {
+            throw APIError.decodingError(NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid JSON"]))
+        }
+        return models
+    }
+
     // MARK: - Autostart
 
     func fetchAutostartStatus() async throws -> AutostartStatus {

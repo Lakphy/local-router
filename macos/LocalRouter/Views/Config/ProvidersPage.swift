@@ -5,6 +5,7 @@ struct ProvidersPage: View {
     @Environment(ConfigStore.self) private var configStore
     @State private var selectedProvider: String?
     @State private var showAddSheet = false
+    @State private var showLanSheet = false
     @State private var newProviderName = ""
     @State private var showDeleteAlert = false
     @State private var providerToDelete = ""
@@ -51,8 +52,8 @@ struct ProvidersPage: View {
 
                 Divider()
 
-                Button {
-                    showAddSheet = true
+                Menu {
+                    Button("添加局域网 local-router") { showLanSheet = true }
                 } label: {
                     HStack {
                         Image(systemName: "plus")
@@ -61,8 +62,10 @@ struct ProvidersPage: View {
                             .font(.caption)
                     }
                     .frame(maxWidth: .infinity)
+                } primaryAction: {
+                    showAddSheet = true
                 }
-                .buttonStyle(.bordered)
+                .menuStyle(.borderlessButton)
                 .controlSize(.small)
                 .padding(8)
             }
@@ -105,6 +108,13 @@ struct ProvidersPage: View {
             AddProviderSheet(name: $newProviderName) { name in
                 addProvider(name: name)
                 newProviderName = ""
+            }
+        }
+        .sheet(isPresented: $showLanSheet) {
+            AddLanProviderSheet(existingNames: Set(draftProviders.keys)) { name, provider in
+                configStore.updateDraft { $0.providers[name] = provider }
+                orderedNames.append(name)
+                selectedProvider = name
             }
         }
     }
@@ -194,6 +204,103 @@ private struct AddProviderSheet: View {
             }
         }
         .frame(minWidth: 360, minHeight: 180)
+    }
+}
+
+// MARK: - Add LAN Provider Sheet
+
+private struct AddLanProviderSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
+    let existingNames: Set<String>
+    let onAdd: (String, ProviderConfig) -> Void
+
+    @State private var ip = ""
+    @State private var port = "4099"
+    @State private var protocolType: ProviderType = .anthropicMessages
+    @State private var loading = false
+    @State private var errorMessage: String?
+
+    private var trimmedIp: String {
+        ip.trimmingCharacters(in: .whitespaces)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("IP 地址", text: $ip)
+                    .textFieldStyle(.roundedBorder)
+                TextField("端口", text: $port)
+                    .textFieldStyle(.roundedBorder)
+                Picker("协议类型", selection: $protocolType) {
+                    ForEach(ProviderType.allCases, id: \.self) { type in
+                        Text(type.displayName).tag(type)
+                    }
+                }
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("添加局域网 local-router")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(loading ? "嗅探中…" : "嗅探并创建") {
+                        Task { await discoverAndAdd() }
+                    }
+                    .disabled(trimmedIp.isEmpty || loading)
+                }
+            }
+        }
+        .frame(minWidth: 380, minHeight: 240)
+    }
+
+    private func discoverAndAdd() async {
+        guard let portValue = Int(port.trimmingCharacters(in: .whitespaces)),
+              portValue >= 1, portValue <= 65535
+        else {
+            errorMessage = "端口无效，必须是 1-65535 的整数"
+            return
+        }
+        let name = "\(trimmedIp)-\(protocolType.rawValue)"
+        if existingNames.contains(name) {
+            errorMessage = "服务商「\(name)」已存在"
+            return
+        }
+        loading = true
+        errorMessage = nil
+        do {
+            let models = try await appState.apiClient.discoverRemoteModels(
+                ip: trimmedIp,
+                port: portValue,
+                protocolType: protocolType
+            )
+            if models.isEmpty {
+                errorMessage = "对端在协议「\(protocolType.displayName)」下没有可用的模型路由"
+                loading = false
+                return
+            }
+            var modelMap: [String: ModelCapabilities] = [:]
+            for model in models {
+                modelMap[model] = ModelCapabilities()
+            }
+            let provider = ProviderConfig(
+                type: protocolType,
+                base: "http://\(trimmedIp):\(portValue)/\(protocolType.rawValue)",
+                apiKey: "no_key",
+                models: modelMap
+            )
+            onAdd(name, provider)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        loading = false
     }
 }
 

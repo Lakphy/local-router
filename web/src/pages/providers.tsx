@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp, Copy, GripVertical, Plus, Trash2 } from 'lucide-react';
 import { type DragEvent, useState } from 'react';
-import { ProviderForm } from '@/components/provider-form';
+import { toast } from 'sonner';
+import { PROVIDER_TYPES, ProviderForm } from '@/components/provider-form';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,13 +31,27 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { discoverRemoteModels } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useConfigStore } from '@/stores/config-store';
-import type { ProviderConfig } from '@/types/config';
+import type { ProviderConfig, ProviderType } from '@/types/config';
 
 const DEFAULT_PROVIDER: ProviderConfig = {
   type: 'openai-completions',
@@ -102,6 +117,11 @@ export function ProvidersPage() {
   const [selected, setSelected] = useState<string | null>(names[0] ?? null);
   const [newName, setNewName] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [lanDialogOpen, setLanDialogOpen] = useState(false);
+  const [lanIp, setLanIp] = useState('');
+  const [lanPort, setLanPort] = useState('4099');
+  const [lanProtocol, setLanProtocol] = useState<ProviderType>('anthropic-messages');
+  const [lanLoading, setLanLoading] = useState(false);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [copyName, setCopyName] = useState('');
   const [copySource, setCopySource] = useState<string | null>(null);
@@ -127,6 +147,44 @@ export function ProvidersPage() {
     setSelected(name);
     setNewName('');
     setDialogOpen(false);
+  }
+
+  async function handleAddLan() {
+    const ip = lanIp.trim();
+    const port = lanPort.trim() || '4099';
+    if (!ip) return;
+    const name = `${ip}-${lanProtocol}`;
+    if (providers[name]) {
+      toast.error(`Provider "${name}" 已存在`);
+      return;
+    }
+    setLanLoading(true);
+    try {
+      const models = await discoverRemoteModels(ip, port, lanProtocol);
+      if (models.length === 0) {
+        toast.error(`对端在协议 "${lanProtocol}" 下没有可用的模型路由`);
+        return;
+      }
+      updateDraft((cfg) => {
+        cfg.providers[name] = {
+          type: lanProtocol,
+          base: `http://${ip}:${port}/${lanProtocol}`,
+          apiKey: 'no_key',
+          proxy: '',
+          models: Object.fromEntries(models.map((m) => [m, {}])),
+        };
+        return cfg;
+      });
+      setSelected(name);
+      setLanIp('');
+      setLanPort('4099');
+      setLanDialogOpen(false);
+      toast.success(`已添加 "${name}"，嗅探到 ${models.length} 个模型`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '嗅探对端模型失败');
+    } finally {
+      setLanLoading(false);
+    }
   }
 
   function handleChange(name: string, config: ProviderConfig) {
@@ -332,13 +390,34 @@ export function ProvidersPage() {
             </ScrollArea>
 
             <div className="shrink-0 pr-2">
+              <div className="flex w-full">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-r-none border-r-0"
+                  onClick={() => setDialogOpen(true)}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  添加 Provider
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="rounded-l-none px-2"
+                      aria-label="更多添加方式"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => setLanDialogOpen(true)}>
+                      添加局域网 local-router
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
               <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="w-full">
-                    <Plus className="h-4 w-4 mr-1" />
-                    添加 Provider
-                  </Button>
-                </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>添加 Provider</DialogTitle>
@@ -358,6 +437,64 @@ export function ProvidersPage() {
                   <DialogFooter>
                     <Button onClick={handleAdd} disabled={!newName.trim()}>
                       创建
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={lanDialogOpen} onOpenChange={setLanDialogOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>添加局域网 local-router</DialogTitle>
+                    <DialogDescription>
+                      输入局域网内其他 local-router 的地址，将自动嗅探其模型路由并创建 Provider
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <div className="flex-1 space-y-2">
+                        <Label htmlFor="lan-ip">IP 地址</Label>
+                        <Input
+                          id="lan-ip"
+                          value={lanIp}
+                          onChange={(e) => setLanIp(e.target.value)}
+                          placeholder="192.168.1.102"
+                          className="font-mono"
+                        />
+                      </div>
+                      <div className="w-24 space-y-2">
+                        <Label htmlFor="lan-port">端口</Label>
+                        <Input
+                          id="lan-port"
+                          value={lanPort}
+                          onChange={(e) => setLanPort(e.target.value)}
+                          placeholder="4099"
+                          className="font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>协议类型</Label>
+                      <Select
+                        value={lanProtocol}
+                        onValueChange={(v) => setLanProtocol(v as ProviderType)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PROVIDER_TYPES.map((t) => (
+                            <SelectItem key={t.value} value={t.value}>
+                              {t.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button onClick={handleAddLan} disabled={!lanIp.trim() || lanLoading}>
+                      {lanLoading ? '嗅探中…' : '嗅探并创建'}
                     </Button>
                   </DialogFooter>
                 </DialogContent>

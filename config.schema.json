@@ -53,8 +53,8 @@
       "minProperties": 1,
       "propertyNames": {
         "type": "string",
-        "pattern": "^[a-z0-9][a-z0-9-]*$",
-        "description": "provider 名称，建议使用 kebab-case，并在 routes 中通过该名称引用。"
+        "pattern": "^[a-z0-9][a-z0-9.-]*$",
+        "description": "provider 名称，建议使用 kebab-case，并在 routes 中通过该名称引用（允许点号以支持 IP 形式的名称）。"
       },
       "additionalProperties": {
         "$ref": "#/$defs/providerConfig"

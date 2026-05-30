@@ -107,6 +107,7 @@ Commands:
   config provider list [--json] [--config <path>]
   config provider show <name> [--show-secrets] [--config <path>]
   config provider add <name> --type <type> --base <url> --api-key <key> --model <name> [--image-input] [--reasoning] [--proxy <url>] [--dry-run] [--config <path>]
+  config provider add-lan <ip> --type <protocol> [--port 4099] [--dry-run] [--config <path>]
   config provider set <name> [--base <url>] [--api-key <key>] [--proxy <url>] [--dry-run] [--config <path>]
   config provider remove <name> [--force] [--dry-run] [--config <path>]
   config provider model list <provider> [--config <path>]
@@ -297,6 +298,108 @@ async function handleProviderAdd(args: string[], flags: GlobalFlags): Promise<nu
             : ['执行写入: 去掉 `--dry-run`'],
         },
         text: result.written ? `已添加 provider: ${name}` : applyResultToText(result),
+      });
+    },
+  });
+}
+
+async function handleProviderAddLan(args: string[], flags: GlobalFlags): Promise<number> {
+  return runCommand({
+    command: 'config.provider.add-lan',
+    flags,
+    fn: async (ctx) => {
+      const [ip, ...flagArgs] = args;
+      ensureNoFlag('ip', ip);
+      if (!ip) {
+        throw new CliError('USAGE_ERROR', 'ip 必填', {
+          hint: '用法: config provider add-lan <ip> --type <protocol> [--port 4099]',
+        });
+      }
+      const parsed = parseArgs({
+        args: flagArgs,
+        options: {
+          type: { type: 'string' },
+          port: { type: 'string', default: '4099' },
+          'dry-run': { type: 'boolean', default: false },
+          config: { type: 'string' },
+        },
+        allowPositionals: true,
+        strict: false,
+      });
+      const type = parsed.values.type as ProviderType | undefined;
+      if (!type || !providerTypes().includes(type)) {
+        throw new CliError(
+          'USAGE_ERROR',
+          'type 必填且必须是 openai-completions/openai-responses/anthropic-messages',
+          { details: { acceptable: providerTypes() } }
+        );
+      }
+      const portStr = parsed.values.port ?? '4099';
+      const port = Number(portStr);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new CliError('USAGE_ERROR', `端口无效: ${portStr}（必须是 1-65535 的整数）`);
+      }
+      const name = `${ip}-${type}`;
+      const { path, config } = readConfig(parsed.values.config);
+      if (config.providers[name]) {
+        throw new CliError('PROVIDER_EXISTS', `provider 已存在: ${name}`, {
+          hint: '使用 `config provider set` 修改字段',
+        });
+      }
+
+      const url = `http://${ip}:${port}/api/models?protocol=${encodeURIComponent(type)}`;
+      let models: string[];
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new CliError('UPSTREAM_UNREACHABLE', `对端返回错误: ${body.error ?? res.status}`, {
+            details: { url },
+          });
+        }
+        const data = (await res.json()) as { models?: string[] };
+        models = Array.isArray(data.models) ? data.models : [];
+      } catch (err) {
+        if (err instanceof CliError) throw err;
+        throw new CliError(
+          'UPSTREAM_UNREACHABLE',
+          `无法连接对端 local-router: ${err instanceof Error ? err.message : err}`,
+          { details: { url } }
+        );
+      }
+
+      if (models.length === 0) {
+        throw new CliError(
+          'USAGE_ERROR',
+          `对端在协议 "${type}" 下没有可用的模型路由，无法创建 provider`,
+          { hint: '确认对端已为该协议配置了具体模型路由（而非仅 * 兜底）' }
+        );
+      }
+
+      const modelMap: Record<string, { 'image-input': boolean; reasoning: boolean }> = {};
+      for (const m of models) {
+        modelMap[m] = { 'image-input': false, reasoning: false };
+      }
+      config.providers[name] = {
+        type,
+        base: `http://${ip}:${port}/${type}`,
+        apiKey: 'no_key',
+        models: modelMap,
+      };
+      const result = applyConfigChange(path, config, { dryRun: parsed.values['dry-run'] });
+      emitResult(ctx, {
+        command: 'config.provider.add-lan',
+        data: { provider: name, models: models.length, ...result },
+        md: {
+          heading: `config.provider.add-lan · ${name} · ${result.written ? '✓' : 'dry-run'}`,
+          data: applyResultToMd(result, `provider ${name} (${models.length} 个模型)`),
+          hints: result.written
+            ? ['热加载: `local-router config apply`']
+            : ['执行写入: 去掉 `--dry-run`'],
+        },
+        text: result.written
+          ? `已添加 provider: ${name}（嗅探到 ${models.length} 个模型）`
+          : applyResultToText(result),
       });
     },
   });
@@ -985,6 +1088,8 @@ async function handleProvider(args: string[], flags: GlobalFlags): Promise<numbe
       return handleProviderShow(rest, flags);
     case 'add':
       return handleProviderAdd(rest, flags);
+    case 'add-lan':
+      return handleProviderAddLan(rest, flags);
     case 'set':
       return handleProviderSet(rest, flags);
     case 'remove':

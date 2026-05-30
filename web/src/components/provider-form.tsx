@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { PluginConfig, ProviderConfig, ProviderType } from '@/types/config';
 import { ModelEditor } from './model-editor';
 
-const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
+export const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
   { value: 'openai-completions', label: 'OpenAI Completions' },
   { value: 'openai-responses', label: 'OpenAI Responses' },
   { value: 'anthropic-messages', label: 'Anthropic Messages' },

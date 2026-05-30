@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { createAutostartManager, getAutostartExecArgs } from './cli/autostart';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
@@ -9,6 +8,7 @@ import { streamText } from 'ai';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
+import { createAutostartManager, getAutostartExecArgs } from './cli/autostart';
 import type { AppConfig, RouteTarget } from './config';
 import { parseConfigPath, resolveLogBaseDir } from './config';
 import { ConfigStore } from './config-store';
@@ -34,7 +34,7 @@ import { queryLogSessions } from './log-sessions';
 import { getLogStorageInfo, startLogStorageBackgroundTask } from './log-storage';
 import { subscribeLogEvents } from './log-tail';
 import { initLogger, resetLogger } from './logger';
-import { createNetworkAccessMiddleware } from './network-access';
+import { createNetworkAccessMiddleware, isLanAddress, isLoopbackAddress } from './network-access';
 import { openAPISpec } from './openapi';
 import { PluginManager } from './plugin-loader';
 import { createAnthropicMessagesRoutes } from './routes/anthropic-messages';
@@ -402,6 +402,54 @@ function createAdminApiRoutes(
       configPath: store.getPath(),
       routeTypes: Object.keys(ROUTE_REGISTRY),
     });
+  });
+
+  // 嗅探接口：供局域网内其他 local-router 探测本机某协议下可用的模型路由别名。
+  // 明文、无需 crypto 握手；自动经过 createNetworkAccessMiddleware 的 LAN 访问保护。
+  // 仅暴露路由别名（model 名），不泄露 apiKey / base。
+  api.get('/models', (c) => {
+    const protocol = c.req.query('protocol');
+    const routeTypes = Object.keys(ROUTE_REGISTRY);
+    if (!protocol || !routeTypes.includes(protocol)) {
+      return c.json({ error: 'invalid or missing protocol', routeTypes }, 400);
+    }
+    const routes = store.get().routes[protocol] ?? {};
+    const models = Object.keys(routes).filter((k) => k !== '*');
+    return c.json({ protocol, models });
+  });
+
+  // 发现代理：供 WebUI 使用（浏览器直连对端会有跨域/混合内容限制），
+  // 由本机 server 代为请求对端 local-router 的 /api/models。
+  api.get('/providers/discover', async (c) => {
+    const ip = c.req.query('ip');
+    const portStr = c.req.query('port') ?? '4099';
+    const protocol = c.req.query('protocol');
+    if (!ip || !protocol) {
+      return c.json({ error: 'ip and protocol are required' }, 400);
+    }
+    // 仅允许局域网/本机地址 + 数字端口，避免被当作 SSRF / 开放代理跳板。
+    const port = Number(portStr);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      return c.json({ error: '端口无效，必须是 1-65535 的整数' }, 400);
+    }
+    if (!isLoopbackAddress(ip) && !isLanAddress(ip)) {
+      return c.json({ error: '仅支持局域网或本机 IP 地址' }, 400);
+    }
+    const url = `http://${ip}:${port}/api/models?protocol=${encodeURIComponent(protocol)}`;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        return c.json({ error: body.error ?? `remote returned ${res.status}` }, 502);
+      }
+      const data = (await res.json()) as { protocol: string; models: string[] };
+      return c.json(data);
+    } catch (err) {
+      return c.json(
+        { error: `无法连接对端 local-router: ${err instanceof Error ? err.message : err}` },
+        502
+      );
+    }
   });
 
   api.get('/config/schema', (c) => {

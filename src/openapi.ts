@@ -57,6 +57,99 @@ export const openAPISpec = {
         },
       },
     },
+    '/api/models': {
+      get: {
+        tags: ['Health'],
+        summary: '嗅探可用模型路由',
+        description:
+          '返回本机指定协议下可用的模型路由别名（routes[protocol] 的 key，排除 * 通配）。供局域网内其他 local-router 探测使用。',
+        parameters: [
+          {
+            name: 'protocol',
+            in: 'query',
+            required: true,
+            schema: {
+              type: 'string',
+              enum: ['openai-completions', 'openai-responses', 'anthropic-messages'],
+            },
+            description: '协议类型',
+          },
+        ],
+        responses: {
+          '200': {
+            description: '可用模型路由列表',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    protocol: { type: 'string', example: 'anthropic-messages' },
+                    models: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      example: ['claude-3-5-sonnet', 'claude-3-opus'],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: '协议参数缺失或无效' },
+        },
+      },
+    },
+    '/api/providers/discover': {
+      get: {
+        tags: ['Health'],
+        summary: '发现局域网 local-router 的模型',
+        description:
+          '由本机 server 代为请求对端 local-router 的 /api/models（规避浏览器跨域），返回对端某协议下的可用模型路由。',
+        parameters: [
+          {
+            name: 'ip',
+            in: 'query',
+            required: true,
+            schema: { type: 'string' },
+            description: '对端 IP',
+          },
+          {
+            name: 'port',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', default: '4099' },
+            description: '对端端口，默认 4099',
+          },
+          {
+            name: 'protocol',
+            in: 'query',
+            required: true,
+            schema: {
+              type: 'string',
+              enum: ['openai-completions', 'openai-responses', 'anthropic-messages'],
+            },
+            description: '协议类型',
+          },
+        ],
+        responses: {
+          '200': {
+            description: '对端可用模型路由列表',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    protocol: { type: 'string', example: 'anthropic-messages' },
+                    models: { type: 'array', items: { type: 'string' } },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: '参数缺失' },
+          '502': { description: '无法连接对端或对端返回错误' },
+        },
+      },
+    },
     '/api/metrics/logs': {
       get: {
         tags: ['Health'],

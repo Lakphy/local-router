@@ -110,6 +110,23 @@ export async function fetchConfigSchema(): Promise<Record<string, unknown>> {
   return res.json();
 }
 
+export async function discoverRemoteModels(
+  ip: string,
+  port: string,
+  protocol: string
+): Promise<string[]> {
+  const params = new URLSearchParams({ ip, port, protocol });
+  const res = await fetch(`/api/providers/discover?${params.toString()}`);
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `嗅探对端模型失败: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return Array.isArray(data.models) ? data.models : [];
+}
+
 export async function checkHealth(): Promise<boolean> {
   try {
     const res = await fetch('/api/health');

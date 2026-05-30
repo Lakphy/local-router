@@ -13,7 +13,11 @@ import { defineCommand } from './registry';
 const PROVIDER_TYPE_ENUM = ['openai-completions', 'openai-responses', 'anthropic-messages'];
 
 const COMMON_CONFIG_FLAG = { name: 'config', type: 'string', description: '配置文件路径' } as const;
-const DRY_RUN_FLAG = { name: 'dry-run', type: 'boolean', description: '只预览 diff，不写入' } as const;
+const DRY_RUN_FLAG = {
+  name: 'dry-run',
+  type: 'boolean',
+  description: '只预览 diff，不写入',
+} as const;
 
 function forward(prefix: string[]) {
   return async (args: string[], flags: import('./global-flags').GlobalFlags) =>
@@ -36,10 +40,7 @@ defineCommand({
 defineCommand({
   name: 'config diff',
   summary: '与备份或指定文件对比',
-  flags: [
-    { name: 'against', type: 'string', description: '备份 id 或路径' },
-    COMMON_CONFIG_FLAG,
-  ],
+  flags: [{ name: 'against', type: 'string', description: '备份 id 或路径' }, COMMON_CONFIG_FLAG],
   supportsJson: true,
   handler: forward(['diff']),
 });
@@ -169,6 +170,27 @@ defineCommand({
 });
 
 defineCommand({
+  name: 'config provider add-lan',
+  summary: '从局域网内其他 local-router 嗅探并新增 provider',
+  positionals: [{ name: 'ip', required: true, description: '对端 IP' }],
+  flags: [
+    {
+      name: 'type',
+      type: 'enum',
+      enum: [...PROVIDER_TYPE_ENUM],
+      required: true,
+      description: '协议类型',
+    },
+    { name: 'port', type: 'string', description: '对端端口（默认 4099）' },
+    DRY_RUN_FLAG,
+    COMMON_CONFIG_FLAG,
+  ],
+  mutates: true,
+  supportsJson: true,
+  handler: forward(['provider', 'add-lan']),
+});
+
+defineCommand({
   name: 'config provider set',
   summary: '修改 provider 字段',
   positionals: [{ name: 'name', required: true, description: 'provider 名' }],
@@ -263,10 +285,7 @@ defineCommand({
 defineCommand({
   name: 'config route list',
   summary: '列出所有路由',
-  flags: [
-    { name: 'entry', type: 'string', description: '只看某入口' },
-    COMMON_CONFIG_FLAG,
-  ],
+  flags: [{ name: 'entry', type: 'string', description: '只看某入口' }, COMMON_CONFIG_FLAG],
   supportsJson: true,
   handler: forward(['route', 'list']),
 });
