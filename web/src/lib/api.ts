@@ -86,7 +86,17 @@ export async function saveConfig(config: AppConfig): Promise<void> {
   });
 }
 
-export async function applyConfig(): Promise<{ providers: number; routes: number }> {
+export interface ApplyResult {
+  summary: { providers: number; routes: number };
+  /** 监听地址（host/port/idleTimeout）发生变化，需要重启服务才能生效 */
+  restartRequired: boolean;
+  /** 当前运行方式是否支持由服务自动重启（dev/test 等场景为 false） */
+  canRestart: boolean;
+  /** 重启后服务的目标监听地址 */
+  listen?: { host: string; port: number };
+}
+
+export async function applyConfig(): Promise<ApplyResult> {
   const res = await fetch('/api/config/apply', { method: 'POST' });
 
   if (!res.ok) {
@@ -95,7 +105,24 @@ export async function applyConfig(): Promise<{ providers: number; routes: number
   }
 
   const data = await res.json();
-  return data.summary;
+  return {
+    summary: data.summary ?? { providers: 0, routes: 0 },
+    restartRequired: Boolean(data.restartRequired),
+    canRestart: Boolean(data.canRestart),
+    listen: data.listen,
+  };
+}
+
+export async function restartServer(): Promise<{ host: string; port: number }> {
+  const res = await fetch('/api/restart', { method: 'POST' });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `重启服务失败: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.listen;
 }
 
 export async function fetchConfigMeta(): Promise<ConfigMeta> {

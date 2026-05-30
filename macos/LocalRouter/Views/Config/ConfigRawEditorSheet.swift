@@ -90,7 +90,13 @@ struct ConfigRawEditorSheet: View {
     private func saveAndApply() async {
         guard let data = text.data(using: .utf8),
               let config = try? JSONDecoder().decode(AppConfig.self, from: data) else { return }
-        try? await configStore.saveAndApply(api: appState.apiClient, overrideDraft: config)
-        dismiss()
+        do {
+            let result = try await configStore.saveAndApply(api: appState.apiClient, overrideDraft: config)
+            dismiss()
+            configStore.handleApplyResult(result, successMessage: "配置已保存并应用")
+        } catch {
+            dismiss()
+            configStore.showResult(success: false, message: error.localizedDescription)
+        }
     }
 }

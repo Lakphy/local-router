@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { promptRestartIfNeeded } from '@/lib/restart';
 import { useConfigStore } from '@/stores/config-store';
 import { useDialogStore } from '@/stores/dialog-store';
 import type { AppConfig } from '@/types/config';
@@ -73,10 +74,11 @@ export function ConfigRawDialog() {
       return;
     }
     try {
-      await saveAndApply(parsed);
+      const result = await saveAndApply(parsed);
       setDraft(parsed);
       setRawOpen(false);
       toast.success('配置已保存并应用');
+      promptRestartIfNeeded(result);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '保存并应用失败');
     }

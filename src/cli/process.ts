@@ -192,6 +192,7 @@ export async function runServerProcess(opts: {
       host,
       port,
       idleTimeoutSeconds: Number.isFinite(idleTimeoutSeconds) ? idleTimeoutSeconds : undefined,
+      requestRestart: () => spawnDetachedRestart({ configPath: ensured.path }),
     });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException | undefined)?.code;
@@ -305,6 +306,44 @@ export async function startDaemon(flags: CliSharedFlags): Promise<void> {
     // ignore
   }
   throw new Error(`后台启动失败，请检查日志: ${files.daemonLog}\n${tail}`);
+}
+
+/**
+ * Spawn a detached `restart` subcommand that outlives the current daemon.
+ *
+ * Used by the in-process admin API (`POST /api/restart`) so that changing the
+ * listen address (host/port/idleTimeout) — which can only take effect by
+ * re-binding `Bun.serve` — actually applies without the user dropping to a
+ * terminal. The detached child runs `restart`, which SIGTERMs the current pid
+ * (graceful shutdown) and then starts a fresh daemon that reads the latest
+ * config file. We delay the spawn briefly so the HTTP response that triggered
+ * it can flush before this process is asked to exit.
+ */
+export function spawnDetachedRestart(opts: { configPath?: string } = {}): void {
+  const trigger = () => {
+    try {
+      ensureRuntimeDirs();
+      const files = getRuntimeFiles();
+      const fd = openSync(files.daemonLog, 'a');
+      const cliScript = process.argv[1] ?? 'src/cli.ts';
+      const childArgs = [cliScript, 'restart'];
+      if (opts.configPath) {
+        childArgs.push('--config', opts.configPath);
+      }
+      const child = Bun.spawn([process.execPath, ...childArgs], {
+        stdin: 'ignore',
+        stdout: fd,
+        stderr: fd,
+        detached: true,
+      });
+      closeSync(fd);
+      child.unref();
+    } catch (err) {
+      console.error(`[restart] 自重启触发失败: ${err instanceof Error ? err.message : err}`);
+    }
+  };
+  const timer = setTimeout(trigger, 400);
+  timer.unref?.();
 }
 
 export async function stopProcess(graceMs = 8000): Promise<boolean> {

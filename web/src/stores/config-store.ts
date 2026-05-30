@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { applyConfig as apiApplyConfig, saveConfig as apiSaveConfig, fetchConfig } from '@/lib/api';
+import {
+  type ApplyResult,
+  applyConfig as apiApplyConfig,
+  saveConfig as apiSaveConfig,
+  fetchConfig,
+} from '@/lib/api';
 import type { AppConfig } from '@/types/config';
 
 function deepEqual(a: unknown, b: unknown): boolean {
@@ -30,8 +35,8 @@ interface ConfigActions {
   updateDraft: (updater: (prev: AppConfig) => AppConfig) => void;
   setDraft: (config: AppConfig) => void;
   save: (overrideDraft?: AppConfig) => Promise<boolean>;
-  apply: () => Promise<boolean>;
-  saveAndApply: (overrideDraft?: AppConfig) => Promise<boolean>;
+  apply: () => Promise<ApplyResult | null>;
+  saveAndApply: (overrideDraft?: AppConfig) => Promise<ApplyResult | null>;
   reset: () => void;
 }
 
@@ -87,9 +92,9 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
   apply: async () => {
     set({ applying: true });
     try {
-      await apiApplyConfig();
+      const result = await apiApplyConfig();
       set({ applying: false });
-      return true;
+      return result;
     } catch (err) {
       set({ applying: false });
       throw err;
@@ -98,7 +103,7 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
 
   saveAndApply: async (overrideDraft?) => {
     const saved = await get().save(overrideDraft);
-    if (!saved) return false;
+    if (!saved) return null;
     return get().apply();
   },
 

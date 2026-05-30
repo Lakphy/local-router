@@ -49,6 +49,30 @@ interface AppListenOptions {
   port?: number;
 }
 
+/** Listen-address fields that can only take effect by re-binding Bun.serve. */
+interface ListenAddress {
+  host: string;
+  port: number;
+  idleTimeout: number;
+}
+
+/** Process-level controls injected by the daemon entrypoint (absent in dev/tests). */
+export interface ServerControl {
+  /** Restart the whole process so a new listen address (host/port/idleTimeout) takes effect. */
+  requestRestart: () => void;
+  /** The address Bun.serve is actually bound to right now — the baseline for restart detection. */
+  current: ListenAddress;
+}
+
+/** Config fields that can only take effect by re-binding Bun.serve (require a restart). */
+function readRestartCriticalServerFields(config: AppConfig): ListenAddress {
+  return {
+    host: config.server?.host ?? '0.0.0.0',
+    port: config.server?.port ?? 4099,
+    idleTimeout: config.server?.idleTimeout ?? 0,
+  };
+}
+
 export interface AppRuntime {
   app: Hono;
   logRealtime: LogRealtimeRuntime;
@@ -238,7 +262,9 @@ function createChatProxyModel(
 function createAdminApiRoutes(
   store: ConfigStore,
   pluginManager: PluginManager,
-  registerCleanup?: (cleanup: CleanupFn) => void
+  registerCleanup?: (cleanup: CleanupFn) => void,
+  serverControl?: ServerControl,
+  restartLogStorageTask?: (logConfig: AppConfig['log']) => void
 ): Hono {
   const api = new Hono();
   const cryptoSessions = new Map<string, { session: CryptoSession; createdAt: number }>();
@@ -376,18 +402,44 @@ function createAdminApiRoutes(
 
   api.post('/config/apply', async (_c) => {
     try {
+      // 重启判定基线：优先用进程"实际绑定"的监听地址（serverControl.current），
+      // 避免上一次改了端口但尚未重启时，再次 apply 会漏判（内存配置已是新值、实际仍是旧端口）。
+      // 无 serverControl（dev/test）时回退到 reload 前的内存配置快照。
+      const fallbackBefore = readRestartCriticalServerFields(store.get());
+      const before = serverControl?.current ?? fallbackBefore;
       const config = store.reload();
+      const after = readRestartCriticalServerFields(config);
+
+      // 日志配置全部热更新：有 log 段则重建 logger，删除整段则重置回默认（修复此前删除不生效）。
       if (config.log) {
         const logBaseDir = resolveLogBaseDir(config.log);
         initLogger(logBaseDir, config.log);
+      } else {
+        resetLogger();
       }
+      // 重启日志存储后台任务，让保留天数（retainDays）等改动立即生效（修复此前需重启）。
+      restartLogStorageTask?.(config.log);
+
       const pluginResult = await pluginManager.reloadAll(config.providers);
+
+      const restartRequired =
+        before.host !== after.host ||
+        before.port !== after.port ||
+        before.idleTimeout !== after.idleTimeout;
+
       return _c.json({
         ok: true,
         summary: {
           providers: Object.keys(config.providers).length,
           routes: Object.keys(config.routes).length,
         },
+        restartRequired,
+        // 仅当确实需要重启时附带目标监听地址，供客户端重启后重连。
+        ...(restartRequired && {
+          listen: { host: after.host, port: after.port },
+          // 若当前运行方式不支持自动重启（如 dev/test），告知客户端需手动重启。
+          canRestart: Boolean(serverControl),
+        }),
         ...(pluginResult.failures.length > 0 && {
           pluginWarnings: pluginResult.failures,
         }),
@@ -395,6 +447,16 @@ function createAdminApiRoutes(
     } catch (err) {
       return _c.json({ error: `应用配置失败: ${err instanceof Error ? err.message : err}` }, 500);
     }
+  });
+
+  // 触发 daemon 自重启：仅在新监听地址需要重新绑定时由客户端确认后调用。
+  api.post('/restart', (c) => {
+    if (!serverControl) {
+      return c.json({ error: '当前运行方式不支持自动重启，请手动执行 local-router restart' }, 501);
+    }
+    const { host, port } = readRestartCriticalServerFields(store.get());
+    serverControl.requestRestart();
+    return c.json({ ok: true, listen: { host, port } });
   });
 
   api.get('/config/meta', (c) => {
@@ -1066,7 +1128,11 @@ async function proxyAdminToDevServer(c: Context, origin: string): Promise<Respon
 
 export async function createApp(
   store: ConfigStore,
-  options?: { registerCleanup?: (cleanup: CleanupFn) => void; listen?: AppListenOptions }
+  options?: {
+    registerCleanup?: (cleanup: CleanupFn) => void;
+    listen?: AppListenOptions;
+    serverControl?: ServerControl;
+  }
 ): Promise<Hono> {
   const config = store.get();
   console.log(`已加载配置: ${store.getPath()}`);
@@ -1079,9 +1145,17 @@ export async function createApp(
     resetLogger();
   }
 
-  // 启动日志存储空间后台计算任务
-  const stopLogStorageTask = startLogStorageBackgroundTask(config.log);
-  options?.registerCleanup?.(stopLogStorageTask);
+  // 启动日志存储空间后台计算任务（apply 时可重启以应用 retainDays 等改动）
+  let stopLogStorageTask = startLogStorageBackgroundTask(config.log);
+  const restartLogStorageTask = (logConfig: AppConfig['log']) => {
+    try {
+      stopLogStorageTask();
+    } catch {
+      // ignore
+    }
+    stopLogStorageTask = startLogStorageBackgroundTask(logConfig);
+  };
+  options?.registerCleanup?.(() => stopLogStorageTask());
 
   // 实例化插件管理器
   const configDir = dirname(resolve(store.getPath()));
@@ -1108,7 +1182,16 @@ export async function createApp(
   }
 
   // 管理面板 API
-  app.route('/api', createAdminApiRoutes(store, pluginManager, options?.registerCleanup));
+  app.route(
+    '/api',
+    createAdminApiRoutes(
+      store,
+      pluginManager,
+      options?.registerCleanup,
+      options?.serverControl,
+      restartLogStorageTask
+    )
+  );
   console.log('已注册管理 API: /api');
 
   // Swagger UI
@@ -1154,12 +1237,14 @@ export async function createAppFromConfigPath(
 
 export async function createAppRuntimeFromConfigPath(
   configPath: string,
-  listen?: AppListenOptions
+  listen?: AppListenOptions,
+  serverControl?: ServerControl
 ): Promise<AppRuntime> {
   const store = new ConfigStore(configPath);
   const cleanups: CleanupFn[] = [];
   const app = await createApp(store, {
     listen,
+    serverControl,
     registerCleanup: (cleanup) => {
       cleanups.push(cleanup);
     },

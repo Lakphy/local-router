@@ -105,4 +105,42 @@ final class AppState {
             await configStore.loadConfig(api: apiClient)
         }
     }
+
+    /// 触发服务自重启，并在重启后切换到新端口重新连接。
+    /// 仅更新端口：客户端经回环（localhost）访问，服务端绑定 host 的变化通常不影响可达性。
+    func restartServerAndReconnect(port: Int) async {
+        do {
+            _ = try await apiClient.restartServer()
+        } catch {
+            connectionError = "触发重启失败: \(error.localizedDescription)"
+            return
+        }
+
+        logsStore.stopRealtime()
+        if port > 0 {
+            connectionSettings.port = port
+        }
+        apiClient.baseURL = connectionSettings.baseURL
+        isConnected = false
+        isConnecting = true
+        connectionError = nil
+
+        // 轮询新地址健康检查（最多约 20 秒），等待新进程绑定端口。
+        var healthy = false
+        for _ in 0..<40 {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if await apiClient.checkHealth() {
+                healthy = true
+                break
+            }
+        }
+
+        isConnecting = false
+        isConnected = healthy
+        if healthy {
+            await configStore.loadConfig(api: apiClient)
+        } else {
+            connectionError = "重启后无法连接到 \(connectionSettings.displayAddress)"
+        }
+    }
 }

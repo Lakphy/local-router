@@ -32,6 +32,15 @@ struct MainView: View {
         } message: {
             Text(configStore.resultAlertMessage)
         }
+        .alert("需要重启服务", isPresented: $configStore.showRestartAlert) {
+            Button("稍后", role: .cancel) {}
+            Button("立即重启") {
+                let port = configStore.restartListenPort
+                Task { await appState.restartServerAndReconnect(port: port) }
+            }
+        } message: {
+            Text("监听地址已更改，需要重启服务才能生效。重启后将连接到端口 \(String(configStore.restartListenPort))。")
+        }
     }
 
     @ViewBuilder

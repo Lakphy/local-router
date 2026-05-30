@@ -69,9 +69,9 @@ struct ConfigDiffSheet: View {
                         Button("保存并应用") {
                             Task {
                                 do {
-                                    try await configStore.saveAndApply(api: appState.apiClient)
+                                    let result = try await configStore.saveAndApply(api: appState.apiClient)
                                     dismiss()
-                                    configStore.showResult(success: true, message: "配置已保存并应用")
+                                    configStore.handleApplyResult(result, successMessage: "配置已保存并应用")
                                 } catch {
                                     dismiss()
                                     configStore.showResult(success: false, message: error.localizedDescription)

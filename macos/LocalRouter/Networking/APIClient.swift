@@ -20,6 +20,18 @@ enum APIError: LocalizedError {
     }
 }
 
+/// 应用配置（/api/config/apply）的结果。
+struct ApplyResult {
+    let providers: Int
+    let routes: Int
+    /// 监听地址（host/port/idleTimeout）发生变化，需要重启服务才能生效。
+    let restartRequired: Bool
+    /// 当前运行方式是否支持由服务自动重启（dev/test 等场景为 false）。
+    let canRestart: Bool
+    let listenHost: String?
+    let listenPort: Int?
+}
+
 @Observable
 final class APIClient {
     var baseURL: URL?
@@ -88,7 +100,7 @@ final class APIClient {
         }
     }
 
-    func applyConfig() async throws -> (providers: Int, routes: Int) {
+    func applyConfig() async throws -> ApplyResult {
         guard let url = makeURL("/api/config/apply") else { throw APIError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -98,10 +110,29 @@ final class APIClient {
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let summary = json?["summary"] as? [String: Any]
-        return (
+        let listen = json?["listen"] as? [String: Any]
+        return ApplyResult(
             providers: summary?["providers"] as? Int ?? 0,
-            routes: summary?["routes"] as? Int ?? 0
+            routes: summary?["routes"] as? Int ?? 0,
+            restartRequired: json?["restartRequired"] as? Bool ?? false,
+            canRestart: json?["canRestart"] as? Bool ?? false,
+            listenHost: listen?["host"] as? String,
+            listenPort: listen?["port"] as? Int
         )
+    }
+
+    /// 触发 daemon 自重启（仅在监听地址变更需要时由用户确认后调用）。返回重启后的目标监听地址。
+    func restartServer() async throws -> (host: String?, port: Int?) {
+        guard let url = makeURL("/api/restart") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+
+        let (data, response) = try await session.data(for: request)
+        try checkHTTPResponse(response)
+
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let listen = json?["listen"] as? [String: Any]
+        return (listen?["host"] as? String, listen?["port"] as? Int)
     }
 
     func fetchConfigMeta() async throws -> ConfigMeta {

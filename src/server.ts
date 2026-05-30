@@ -8,6 +8,8 @@ export interface StartServerOptions {
   host: string;
   port: number;
   idleTimeoutSeconds?: number;
+  /** Triggers a full process restart (re-binds Bun.serve with the latest config). */
+  requestRestart?: () => void;
 }
 
 export interface RunningServer {
@@ -43,11 +45,21 @@ function resolveIdleTimeoutSeconds(explicit?: number): number {
 }
 
 export async function startServer(options: StartServerOptions): Promise<RunningServer> {
-  const runtime = await createAppRuntimeFromConfigPath(options.configPath, {
-    host: options.host,
-    port: options.port,
-  });
   const idleTimeout = resolveIdleTimeoutSeconds(options.idleTimeoutSeconds);
+  const requestRestart = options.requestRestart;
+  const runtime = await createAppRuntimeFromConfigPath(
+    options.configPath,
+    {
+      host: options.host,
+      port: options.port,
+    },
+    requestRestart
+      ? {
+          requestRestart,
+          current: { host: options.host, port: options.port, idleTimeout },
+        }
+      : undefined
+  );
   const server = Bun.serve({
     fetch: (request: Request, server: ServerWithRequestIp) => {
       const remoteAddress = server.requestIP(request)?.address ?? null;

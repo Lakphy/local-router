@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { promptRestartIfNeeded } from '@/lib/restart';
 import { useConfigStore } from '@/stores/config-store';
 import { type DiffMode, useDialogStore } from '@/stores/dialog-store';
 
@@ -51,8 +52,9 @@ export function ConfigDiffDialog() {
         await save();
         toast.success('配置已保存');
       } else if (diffMode === 'saveAndApply') {
-        await saveAndApply();
+        const result = await saveAndApply();
         toast.success('配置已保存并应用');
+        promptRestartIfNeeded(result);
       }
       setDiffOpen(false);
     } catch (err) {
