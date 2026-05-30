@@ -138,7 +138,9 @@ export function SessionsPage() {
               <Label>时间窗口</Label>
               <Select
                 value={filters.window}
-                onValueChange={(v) => setFilter('window', v as '1h' | '6h' | '24h')}
+                onValueChange={(v) =>
+                  setFilter('window', v as '1h' | '6h' | '24h' | '7d' | '1mo' | '1y')
+                }
               >
                 <SelectTrigger className="h-8 w-full">
                   <SelectValue />
@@ -147,6 +149,9 @@ export function SessionsPage() {
                   <SelectItem value="1h">最近 1 小时</SelectItem>
                   <SelectItem value="6h">最近 6 小时</SelectItem>
                   <SelectItem value="24h">最近 24 小时</SelectItem>
+                  <SelectItem value="7d">最近 7 天</SelectItem>
+                  <SelectItem value="1mo">最近 1 个月</SelectItem>
+                  <SelectItem value="1y">最近 1 年</SelectItem>
                 </SelectContent>
               </Select>
             </div>

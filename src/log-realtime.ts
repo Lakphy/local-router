@@ -246,7 +246,7 @@ function compileRealtimeQuery(input: Record<string, unknown> | undefined): Compi
 
   const windowRaw = parseStringValue(query.window) ?? '24h';
   if (!isLogQueryWindow(windowRaw)) {
-    throw new Error('window 参数仅支持 1h | 6h | 24h');
+    throw new Error('window 参数仅支持 1h | 6h | 24h | 7d | 1mo | 1y');
   }
 
   const from = parseStringValue(query.from);

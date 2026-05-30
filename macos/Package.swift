@@ -1,10 +1,10 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
     name: "LocalRouter",
     platforms: [
-        .macOS(.v14)
+        .macOS(.v15)
     ],
     products: [
         .library(
@@ -18,6 +18,7 @@ let package = Package(
             path: "LocalRouter",
             exclude: ["Assets.xcassets", "LocalRouter.entitlements"],
             swiftSettings: [
+                .swiftLanguageMode(.v5),
                 .enableExperimentalFeature("StrictConcurrency")
             ]
         ),

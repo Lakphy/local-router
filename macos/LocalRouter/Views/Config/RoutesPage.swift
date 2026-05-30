@@ -29,23 +29,13 @@ struct RoutesPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("路由")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    Text("管理协议入口与模型路由映射")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
                 if routeTypes.isEmpty {
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        .frame(height: 120)
-                        .overlay {
-                            Text("暂无路由配置，请先添加一个协议入口")
-                                .foregroundStyle(.secondary)
-                        }
+                    ContentUnavailableView(
+                        "暂无路由配置",
+                        systemImage: "arrow.triangle.branch",
+                        description: Text("请先在下方添加一个协议入口")
+                    )
+                    .frame(height: 200)
                 } else {
                     VStack(alignment: .leading, spacing: 24) {
                         ForEach(routeTypes, id: \.self) { routeType in
@@ -74,13 +64,14 @@ struct RoutesPage: View {
                                 Text("添加协议入口")
                             }
                         }
-                        .buttonStyle(.bordered)
+                        .secondaryActionStyle()
                         .disabled(newRouteType.isEmpty)
                     }
                 }
             }
-            .padding()
+            .padding(DS.padPage)
         }
+        .contentScroll()
         .alert("确认删除", isPresented: $showDeleteAlert) {
             Button("取消", role: .cancel) {}
             Button("删除", role: .destructive) {
@@ -134,18 +125,14 @@ struct RoutesPage: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.background)
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-            }
+            .cardSurface(cornerRadius: DS.controlRadius)
 
             // Rules area with left connector line
             if !rules.isEmpty {
                 HStack(alignment: .top, spacing: 0) {
                     // Vertical connector line
                     Rectangle()
-                        .fill(Color.gray.opacity(0.3))
+                        .fill(.separator)
                         .frame(width: 1)
                         .padding(.leading, 12)
 

@@ -23,8 +23,6 @@
 		271EC4EC9DF1BD26AD2287C0 /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71E72DA0518418589D664BA /* StatusBadge.swift */; };
 		35343F24B34911CD5D7AEC46 /* ModelEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 365313D8E7156B4F2A6E12B9 /* ModelEditorView.swift */; };
 		38A493CC667CF112CAAD9688 /* MetricsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95E599208ABA4E3242827D1B /* MetricsModels.swift */; };
-		3A1B2C4D5E6F7A8B9C0D1E2F /* OrderedMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2C3D4E5F6A7B8C9D0E1F20 /* OrderedMap.swift */; };
-		3B2C3D4E5F6A7B8C9D0E1F21 /* OrderedJSONEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3D4E5F6A7B8C9D0E1F2A31 /* OrderedJSONEncoder.swift */; };
 		4C5D8171A11CD0EC9F979678 /* SessionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CC274795D5E9E883E542F10 /* SessionModels.swift */; };
 		4D1FC7B8455F83BD9A675631 /* ConnectionSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 620C1F372535646E1616952A /* ConnectionSettings.swift */; };
 		500A2AB2C31182B51A995AA0 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFD3A044021217CCD212D5A9 /* ConnectionView.swift */; };
@@ -34,6 +32,7 @@
 		6E189ABBE04E808CEC6ED210 /* RouteGroupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F23F609E7F71796D06280D /* RouteGroupView.swift */; };
 		72155B68951B4104F40FA6D1 /* CopyButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF9FFD0A2543E1E924B9621 /* CopyButton.swift */; };
 		7CE792CCB2FAEEC604C13235 /* LogsSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A062EBB99340DEEC609E857 /* LogsSettingsPage.swift */; };
+		817F47FE303DAD75EAC00A12 /* OrderedMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E5A2203ED15AF69392FBD0A /* OrderedMap.swift */; };
 		829FE13F288ACB02A0DB8122 /* ProvidersPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8751F2666D108EDFBF35ABF7 /* ProvidersPage.swift */; };
 		9B3C8FB8A52E053DA894E0D2 /* WebSocketMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D3CA46EAD8E8E78740FEEAD /* WebSocketMessages.swift */; };
 		9E9999BE9BA4DE1920DA9983 /* ConfigRawEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 392E789E8FAD8F960AF09C2E /* ConfigRawEditorSheet.swift */; };
@@ -42,6 +41,7 @@
 		BC2EC4B8BC3017B8FF3D3EEF /* DiffEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D79456E63CF699CBC1728D /* DiffEngine.swift */; };
 		BC8FF6528487D9794708B99C /* CryptoClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB4B0828A3FF3981EFBEFF64 /* CryptoClient.swift */; };
 		C0C5A05CC10C9F02C8DD2046 /* ProviderFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 663C7BDF6A5AC6B9F262918B /* ProviderFormView.swift */; };
+		C33D27B0CF2AA9026E06A254 /* OrderedJSONEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE35325EF5347CAB28FDE2FC /* OrderedJSONEncoder.swift */; };
 		C6895EB3DB2700E08DA522AE /* DashboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50473C2F1094BA011E2F2F68 /* DashboardStore.swift */; };
 		CAD0062332CC58F00EF96872 /* LogTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9C66EF88D854474C74F108 /* LogTableView.swift */; };
 		D4EBA92EF796765076B3744E /* SessionsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CFA615CC44E6EF4932C5996 /* SessionsStore.swift */; };
@@ -50,6 +50,7 @@
 		DE123FE2EBA8A68E2791E663 /* LogsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D0487E18A858C25DA86AD59 /* LogsPage.swift */; };
 		E24DA52F42F92030CDF61E6D /* LogModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5C37467004205A9BC99BED /* LogModels.swift */; };
 		EC5CDC7810C1FC7ADB7CF9E9 /* StatBoxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECA719E29A3FF028C17F2B4C /* StatBoxView.swift */; };
+		ECE7EAB3076CAB64CB86281A /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64049F8F7D58B1B73FBA2068 /* DesignSystem.swift */; };
 		ED8AAE1B2BA82176DCFE9DA5 /* ActionBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F3F8975DE14D05CA2D18731 /* ActionBarView.swift */; };
 		F3A6D345491085422535BDA6 /* LogFilterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BB344453240EEE7A2819119 /* LogFilterView.swift */; };
 		F673B68569531F155F048ACD /* LocalRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0135691221F14EC879B530 /* LocalRouterTests.swift */; };
@@ -68,8 +69,8 @@
 
 /* Begin PBXFileReference section */
 		07121E814E995D0F566BFD46 /* DashboardPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardPage.swift; sourceTree = "<group>"; };
-		5C3D4E5F6A7B8C9D0E1F2A31 /* OrderedJSONEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrderedJSONEncoder.swift; sourceTree = "<group>"; };
 		092511CE06C20A53C2B3F303 /* JSONPrettyPrint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONPrettyPrint.swift; sourceTree = "<group>"; };
+		0E5A2203ED15AF69392FBD0A /* OrderedMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrderedMap.swift; sourceTree = "<group>"; };
 		0ED1CA6B58D1FD204CF67330 /* LocalRouter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LocalRouter.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		165BC9234AAA20D7280E466B /* Formatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatters.swift; sourceTree = "<group>"; };
 		1A0135691221F14EC879B530 /* LocalRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalRouterTests.swift; sourceTree = "<group>"; };
@@ -83,13 +84,13 @@
 		392E789E8FAD8F960AF09C2E /* ConfigRawEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigRawEditorSheet.swift; sourceTree = "<group>"; };
 		3A062EBB99340DEEC609E857 /* LogsSettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsSettingsPage.swift; sourceTree = "<group>"; };
 		41C74C68F2BB6985045CBF0B /* LogStatsBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogStatsBarView.swift; sourceTree = "<group>"; };
-		4B2C3D4E5F6A7B8C9D0E1F20 /* OrderedMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrderedMap.swift; sourceTree = "<group>"; };
 		4C728A45FD74ABE8300F04EB /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		50473C2F1094BA011E2F2F68 /* DashboardStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardStore.swift; sourceTree = "<group>"; };
 		5D3CA46EAD8E8E78740FEEAD /* WebSocketMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketMessages.swift; sourceTree = "<group>"; };
 		5F3F8975DE14D05CA2D18731 /* ActionBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionBarView.swift; sourceTree = "<group>"; };
 		60DE040539FAEC0FEE18AA2B /* RoutesPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutesPage.swift; sourceTree = "<group>"; };
 		620C1F372535646E1616952A /* ConnectionSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionSettings.swift; sourceTree = "<group>"; };
+		64049F8F7D58B1B73FBA2068 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		64963BAB0BD6D499C799536C /* ConfigDiffSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigDiffSheet.swift; sourceTree = "<group>"; };
 		663C7BDF6A5AC6B9F262918B /* ProviderFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderFormView.swift; sourceTree = "<group>"; };
 		6D408888909F113E9CDC4319 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
@@ -116,6 +117,7 @@
 		FAA64FDB1F3D21A30C4B7D57 /* LocalRouterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalRouterApp.swift; sourceTree = "<group>"; };
 		FB4B0828A3FF3981EFBEFF64 /* CryptoClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoClient.swift; sourceTree = "<group>"; };
 		FC5C37467004205A9BC99BED /* LogModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogModels.swift; sourceTree = "<group>"; };
+		FE35325EF5347CAB28FDE2FC /* OrderedJSONEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrderedJSONEncoder.swift; sourceTree = "<group>"; };
 		FFD3A044021217CCD212D5A9 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -126,7 +128,7 @@
 				4C728A45FD74ABE8300F04EB /* AppConfig.swift */,
 				FC5C37467004205A9BC99BED /* LogModels.swift */,
 				95E599208ABA4E3242827D1B /* MetricsModels.swift */,
-				4B2C3D4E5F6A7B8C9D0E1F20 /* OrderedMap.swift */,
+				0E5A2203ED15AF69392FBD0A /* OrderedMap.swift */,
 				2CC274795D5E9E883E542F10 /* SessionModels.swift */,
 				9C5CC8E857DACD37C70AD89B /* TokenUsage.swift */,
 				5D3CA46EAD8E8E78740FEEAD /* WebSocketMessages.swift */,
@@ -280,7 +282,7 @@
 				B2D79456E63CF699CBC1728D /* DiffEngine.swift */,
 				165BC9234AAA20D7280E466B /* Formatters.swift */,
 				092511CE06C20A53C2B3F303 /* JSONPrettyPrint.swift */,
-				5C3D4E5F6A7B8C9D0E1F2A31 /* OrderedJSONEncoder.swift */,
+				FE35325EF5347CAB28FDE2FC /* OrderedJSONEncoder.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -289,6 +291,7 @@
 			isa = PBXGroup;
 			children = (
 				DFF9FFD0A2543E1E924B9621 /* CopyButton.swift */,
+				64049F8F7D58B1B73FBA2068 /* DesignSystem.swift */,
 				D998CF33A6A7BE95440B5D5A /* JsonTextView.swift */,
 				ECA719E29A3FF028C17F2B4C /* StatBoxView.swift */,
 				F71E72DA0518418589D664BA /* StatusBadge.swift */,
@@ -384,6 +387,7 @@
 				BC8FF6528487D9794708B99C /* CryptoClient.swift in Sources */,
 				F91578FA14F9831050754F4A /* DashboardPage.swift in Sources */,
 				C6895EB3DB2700E08DA522AE /* DashboardStore.swift in Sources */,
+				ECE7EAB3076CAB64CB86281A /* DesignSystem.swift in Sources */,
 				BC2EC4B8BC3017B8FF3D3EEF /* DiffEngine.swift in Sources */,
 				18416D40D6E0CEE4F021B035 /* Formatters.swift in Sources */,
 				22D4017BE9D8C91233007071 /* GeneralSettingsPage.swift in Sources */,
@@ -400,8 +404,8 @@
 				245B42A6E2E90057EBFB6F0E /* MainView.swift in Sources */,
 				38A493CC667CF112CAAD9688 /* MetricsModels.swift in Sources */,
 				35343F24B34911CD5D7AEC46 /* ModelEditorView.swift in Sources */,
-				3A1B2C4D5E6F7A8B9C0D1E2F /* OrderedMap.swift in Sources */,
-				3B2C3D4E5F6A7B8C9D0E1F21 /* OrderedJSONEncoder.swift in Sources */,
+				C33D27B0CF2AA9026E06A254 /* OrderedJSONEncoder.swift in Sources */,
+				817F47FE303DAD75EAC00A12 /* OrderedMap.swift in Sources */,
 				062EC3B06095A386985D00D5 /* OverviewStripView.swift in Sources */,
 				C0C5A05CC10C9F02C8DD2046 /* ProviderFormView.swift in Sources */,
 				829FE13F288ACB02A0DB8122 /* ProvidersPage.swift in Sources */,
@@ -517,7 +521,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -579,7 +583,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

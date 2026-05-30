@@ -9,28 +9,26 @@ struct ActionBarView: ToolbarContent {
     }
 
     var body: some ToolbarContent {
-        // Status indicator
+        // Sync status indicator
         ToolbarItem(placement: .automatic) {
-            if configStore.isDirty {
-                HStack(spacing: 5) {
-                    Circle().fill(.orange).frame(width: 6, height: 6)
-                    Text("未保存更改")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 6)
-            } else {
-                HStack(spacing: 5) {
-                    Circle().fill(.green.opacity(0.6)).frame(width: 6, height: 6)
-                    Text("已同步")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, 6)
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(configStore.isDirty ? Color.orange : Color.green)
+                    .frame(width: 6, height: 6)
+                Text(configStore.isDirty ? "未保存更改" : "已同步")
+                    .font(.caption)
+                    .foregroundStyle(configStore.isDirty ? .secondary : .tertiary)
             }
+            .padding(.horizontal, 6)
+            .contentTransition(.opacity)
+            .animation(.snappy, value: configStore.isDirty)
         }
 
-        // More menu: Diff / Raw / Reset
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.fixed)
+        }
+
+        // Overflow: Diff / Raw / Reset
         ToolbarItem(placement: .automatic) {
             Menu {
                 Button {
@@ -61,7 +59,7 @@ struct ActionBarView: ToolbarContent {
             }
         }
 
-        // Apply
+        // Primary action
         ToolbarItem(placement: .automatic) {
             Button {
                 configStore.diffMode = .saveAndApply
@@ -73,6 +71,7 @@ struct ActionBarView: ToolbarContent {
                     Text("应用更改")
                 }
             }
+            .primaryActionStyle(enabled: configStore.isDirty && !busy)
             .disabled(!configStore.isDirty || busy)
         }
     }

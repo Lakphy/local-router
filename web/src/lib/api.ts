@@ -388,7 +388,7 @@ export interface LogEventDetail {
 }
 
 export interface FetchLogEventsParams {
-  window?: '1h' | '6h' | '24h';
+  window?: '1h' | '6h' | '24h' | '7d' | '1mo' | '1y';
   from?: string;
   to?: string;
   levels?: Array<'info' | 'error'>;
@@ -439,7 +439,7 @@ function buildLogQueryString(paramsInput: FetchLogEventsParams): string {
 }
 
 export interface FetchLogSessionsParams {
-  window?: '1h' | '6h' | '24h';
+  window?: '1h' | '6h' | '24h' | '7d' | '1mo' | '1y';
   from?: string;
   to?: string;
   user?: string;

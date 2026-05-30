@@ -1,20 +1,29 @@
 import SwiftUI
 
-struct JsonTextView: View {
-    let json: Any?
-    var maxHeight: CGFloat = 400
+/// Scrollable, selectable monospaced JSON viewer on a content card surface.
+private struct JsonContainer: View {
+    let text: String
+    var maxHeight: CGFloat
 
     var body: some View {
         ScrollView {
-            Text(formattedJSON)
+            Text(text)
                 .font(.system(.body, design: .monospaced))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
         }
         .frame(maxHeight: maxHeight)
-        .background(.background.secondary)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .cardSurface()
+    }
+}
+
+struct JsonTextView: View {
+    let json: Any?
+    var maxHeight: CGFloat = 400
+
+    var body: some View {
+        JsonContainer(text: formattedJSON, maxHeight: maxHeight)
     }
 
     private var formattedJSON: String {
@@ -32,16 +41,7 @@ struct JsonStringView: View {
     var maxHeight: CGFloat = 400
 
     var body: some View {
-        ScrollView {
-            Text(formattedJSON)
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
-        }
-        .frame(maxHeight: maxHeight)
-        .background(.background.secondary)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        JsonContainer(text: formattedJSON, maxHeight: maxHeight)
     }
 
     private var formattedJSON: String {

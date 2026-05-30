@@ -563,7 +563,7 @@ function createAdminApiRoutes(
     try {
       const windowRaw = c.req.query('window') ?? '24h';
       if (!isLogQueryWindow(windowRaw)) {
-        return c.json({ error: 'window 参数仅支持 1h | 6h | 24h' }, 400);
+        return c.json({ error: 'window 参数仅支持 1h | 6h | 24h | 7d | 1mo | 1y' }, 400);
       }
 
       const range = resolveLogQueryRange({
@@ -629,7 +629,7 @@ function createAdminApiRoutes(
     try {
       const windowRaw = c.req.query('window') ?? '24h';
       if (!isLogQueryWindow(windowRaw)) {
-        return c.json({ error: 'window 参数仅支持 1h | 6h | 24h' }, 400);
+        return c.json({ error: 'window 参数仅支持 1h | 6h | 24h | 7d | 1mo | 1y' }, 400);
       }
 
       const range = resolveLogQueryRange({
@@ -684,7 +684,7 @@ function createAdminApiRoutes(
     try {
       const windowRaw = c.req.query('window') ?? '24h';
       if (!isLogQueryWindow(windowRaw)) {
-        return c.json({ error: 'window 参数仅支持 1h | 6h | 24h' }, 400);
+        return c.json({ error: 'window 参数仅支持 1h | 6h | 24h | 7d | 1mo | 1y' }, 400);
       }
 
       const range = resolveLogQueryRange({
@@ -750,7 +750,7 @@ function createAdminApiRoutes(
 
     const windowRaw = c.req.query('window') ?? '1h';
     if (!isLogQueryWindow(windowRaw)) {
-      return c.json({ error: 'window 参数仅支持 1h | 6h | 24h' }, 400);
+      return c.json({ error: 'window 参数仅支持 1h | 6h | 24h | 7d | 1mo | 1y' }, 400);
     }
 
     const sortRaw = c.req.query('sort') ?? 'time_desc';

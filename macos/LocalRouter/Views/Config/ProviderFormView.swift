@@ -61,8 +61,9 @@ struct ProviderFormView: View {
                 }
                 .formStyle(.grouped)
             }
-            .padding()
+            .padding(DS.padPage)
         }
+        .contentScroll()
     }
 
     private func binding<T>(_ keyPath: WritableKeyPath<ProviderConfig, T>) -> Binding<T> {

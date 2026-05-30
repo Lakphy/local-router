@@ -13,11 +13,10 @@ struct StatusBadge: View {
         Text(text)
             .font(.caption2)
             .fontWeight(.medium)
+            .foregroundStyle(color)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(color.opacity(0.15))
-            .foregroundStyle(color)
-            .clipShape(Capsule())
+            .background(color.opacity(0.15), in: .capsule)
     }
 
     static func forStatusClass(_ statusClass: StatusClass) -> StatusBadge {

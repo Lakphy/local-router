@@ -2,7 +2,7 @@ import Foundation
 
 @Observable
 final class SessionsStore {
-    var window: MetricsWindow = .twentyFourHours
+    var window: LogQueryWindow = .twentyFourHours
     var user: String = ""
     var session: String = ""
     var keyword: String = ""

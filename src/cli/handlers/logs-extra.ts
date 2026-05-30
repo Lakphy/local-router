@@ -51,7 +51,7 @@ defineSchemaCommand<TokensFlags>({
     {
       name: 'window',
       type: 'enum',
-      enum: ['1h', '6h', '24h'],
+      enum: ['1h', '6h', '24h', '7d', '1mo', '1y'],
       default: '24h',
       description: '时间窗口',
     },
@@ -127,7 +127,7 @@ defineSchemaCommand<CostFlags>({
     {
       name: 'window',
       type: 'enum',
-      enum: ['1h', '6h', '24h'],
+      enum: ['1h', '6h', '24h', '7d', '1mo', '1y'],
       default: '24h',
       description: '时间窗口',
     },

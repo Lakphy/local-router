@@ -1,42 +1,12 @@
 import SwiftUI
+import AppKit
 
 struct LogsPage: View {
     @Environment(AppState.self) private var appState
     @Environment(LogsStore.self) private var store
 
     var body: some View {
-        @Bindable var store = store
-
         VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("日志检索")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    Text("查询和分析请求日志")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-
-                Toggle("实时", isOn: Binding(
-                    get: { store.realtimeEnabled },
-                    set: { enabled in
-                        if enabled {
-                            store.startRealtime(wsURL: appState.connectionSettings.wsURL)
-                        } else {
-                            store.stopRealtime()
-                        }
-                    }
-                ))
-                .toggleStyle(.switch)
-                .disabled(!store.canEnableRealtime)
-            }
-            .padding()
-
-            Divider()
-
             // Filters
             LogFilterView()
 
@@ -53,8 +23,33 @@ struct LogsPage: View {
             // Table
             LogTableView()
         }
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Menu {
+                    Button("CSV") { exportLogs(format: .csv) }
+                    Button("JSON") { exportLogs(format: .json) }
+                } label: {
+                    Label("导出", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
         .task {
             await store.fetchFirstPage(api: appState.apiClient)
+        }
+    }
+
+    private func exportLogs(format: ExportFormat) {
+        Task {
+            let params = LogQueryParams(window: store.window)
+            guard let data = try? await appState.apiClient.exportLogEvents(params: params, format: format) else { return }
+
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = "logs-export.\(format.rawValue)"
+            panel.allowedContentTypes = format == .csv ? [.commaSeparatedText] : [.json]
+
+            if panel.runModal() == .OK, let url = panel.url {
+                try? data.write(to: url)
+            }
         }
     }
 }

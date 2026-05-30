@@ -10,7 +10,7 @@ import {
 import { LogRealtimeClient, type LogRealtimeStatus } from '@/lib/log-realtime-client';
 
 export interface SessionsFilters {
-  window: '1h' | '6h' | '24h';
+  window: '1h' | '6h' | '24h' | '7d' | '1mo' | '1y';
   from: string;
   to: string;
   user: string;

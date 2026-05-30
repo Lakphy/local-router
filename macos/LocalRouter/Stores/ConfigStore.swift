@@ -12,6 +12,10 @@ final class ConfigStore {
     var showRawEditor = false
     var diffMode: DiffMode = .view
 
+    var showResultAlert = false
+    var resultAlertSuccess = true
+    var resultAlertMessage = ""
+
     enum DiffMode {
         case view
         case save
@@ -61,6 +65,12 @@ final class ConfigStore {
     func saveAndApply(api: APIClient, overrideDraft: AppConfig? = nil) async throws {
         try await save(api: api, overrideDraft: overrideDraft)
         try await apply(api: api)
+    }
+
+    func showResult(success: Bool, message: String) {
+        resultAlertSuccess = success
+        resultAlertMessage = message
+        showResultAlert = true
     }
 
     func reset() {

@@ -215,7 +215,7 @@ export const openAPISpec = {
             required: false,
             schema: {
               type: 'string',
-              enum: ['1h', '6h', '24h'],
+              enum: ['1h', '6h', '24h', '7d', '1mo', '1y'],
               default: '24h',
             },
             description: '时间窗口（当未提供 from/to 时生效）',
@@ -545,7 +545,7 @@ export const openAPISpec = {
             required: false,
             schema: {
               type: 'string',
-              enum: ['1h', '6h', '24h'],
+              enum: ['1h', '6h', '24h', '7d', '1mo', '1y'],
               default: '24h',
             },
             description: '时间窗口',
@@ -666,7 +666,7 @@ export const openAPISpec = {
             required: false,
             schema: {
               type: 'string',
-              enum: ['1h', '6h', '24h'],
+              enum: ['1h', '6h', '24h', '7d', '1mo', '1y'],
               default: '1h',
             },
           },

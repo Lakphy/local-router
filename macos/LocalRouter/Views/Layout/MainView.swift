@@ -13,6 +13,8 @@ struct MainView: View {
         } detail: {
             detailView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationTitle(appState.selectedPage.title)
+                .navigationSubtitle(appState.selectedPage.subtitle)
                 .toolbar {
                     if appState.selectedPage.isConfigPage {
                         ActionBarView()
@@ -24,6 +26,11 @@ struct MainView: View {
         }
         .sheet(isPresented: $configStore.showRawEditor) {
             ConfigRawEditorSheet()
+        }
+        .alert(configStore.resultAlertSuccess ? "操作成功" : "操作失败", isPresented: $configStore.showResultAlert) {
+            Button("好") {}
+        } message: {
+            Text(configStore.resultAlertMessage)
         }
     }
 

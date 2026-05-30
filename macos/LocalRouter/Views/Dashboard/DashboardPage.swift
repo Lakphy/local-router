@@ -5,19 +5,14 @@ struct DashboardPage: View {
     @Environment(DashboardStore.self) private var store
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("仪表盘")
-                .font(.title2)
-                .fontWeight(.semibold)
-            Text("Local Router 服务状态与配置概览")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            OverviewStripView()
-
-            Spacer()
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.gapL) {
+                OverviewStripView()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(DS.padPage)
         }
-        .padding()
+        .contentScroll()
         .task {
             await store.refresh(api: appState.apiClient)
         }

@@ -30,7 +30,6 @@ struct StatBoxView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(.background.secondary)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .cardSurface()
     }
 }

@@ -14,6 +14,38 @@ enum MetricsWindow: String, Codable, Sendable, CaseIterable {
     }
 }
 
+// 日志检索与用户会话使用的时间窗口，比指标面板支持更长的范围。
+enum LogQueryWindow: String, Codable, Sendable, CaseIterable {
+    case oneHour = "1h"
+    case sixHours = "6h"
+    case twentyFourHours = "24h"
+    case sevenDays = "7d"
+    case oneMonth = "1mo"
+    case oneYear = "1y"
+
+    var displayName: String {
+        switch self {
+        case .oneHour: "1 小时"
+        case .sixHours: "6 小时"
+        case .twentyFourHours: "24 小时"
+        case .sevenDays: "7 天"
+        case .oneMonth: "1 个月"
+        case .oneYear: "1 年"
+        }
+    }
+
+    var seconds: TimeInterval {
+        switch self {
+        case .oneHour: 3600
+        case .sixHours: 6 * 3600
+        case .twentyFourHours: 24 * 3600
+        case .sevenDays: 7 * 24 * 3600
+        case .oneMonth: 30 * 24 * 3600
+        case .oneYear: 365 * 24 * 3600
+        }
+    }
+}
+
 struct LogMetricsResponse: Codable, Sendable {
     let window: String
     let from: String

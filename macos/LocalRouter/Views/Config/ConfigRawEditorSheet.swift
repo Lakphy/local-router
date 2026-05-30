@@ -8,61 +8,45 @@ struct ConfigRawEditorSheet: View {
     @State private var parseError: String?
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("原始配置")
-                    .font(.headline)
-                Spacer()
+        NavigationStack {
+            VStack(spacing: 0) {
+                TextEditor(text: $text)
+                    .font(.system(.body, design: .monospaced))
+                    .onChange(of: text) { _, newValue in
+                        validateJSON(newValue)
+                    }
 
                 if let error = parseError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-
-                Button("关闭") { dismiss() }
-                    .buttonStyle(.borderless)
-            }
-            .padding()
-
-            Divider()
-
-            TextEditor(text: $text)
-                .font(.system(.body, design: .monospaced))
-                .onChange(of: text) { _, newValue in
-                    validateJSON(newValue)
-                }
-
-            Divider()
-
-            HStack {
-                Button("格式化") {
-                    formatJSON()
-                }
-                .buttonStyle(.bordered)
-
-                Button("重置") {
-                    loadFromDraft()
-                }
-                .buttonStyle(.bordered)
-
-                Spacer()
-
-                Button("应用到草稿") {
-                    applyToDraft()
-                }
-                .buttonStyle(.bordered)
-                .disabled(parseError != nil)
-
-                Button("保存并应用") {
-                    Task {
-                        await saveAndApply()
+                    Divider()
+                    HStack(spacing: 6) {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                        Spacer()
                     }
+                    .padding(.horizontal)
+                    .padding(.vertical, 6)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(parseError != nil)
             }
-            .padding()
+            .navigationTitle("原始配置")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { dismiss() }
+                }
+                ToolbarItemGroup(placement: .automatic) {
+                    Button("格式化") { formatJSON() }
+                    Button("重置") { loadFromDraft() }
+                    Button("应用到草稿") { applyToDraft() }
+                        .disabled(parseError != nil)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存并应用") {
+                        Task { await saveAndApply() }
+                    }
+                    .primaryActionStyle(enabled: parseError == nil)
+                    .disabled(parseError != nil)
+                }
+            }
         }
         .frame(minWidth: 600, minHeight: 400)
         .onAppear {

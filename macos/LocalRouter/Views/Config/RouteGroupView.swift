@@ -152,14 +152,8 @@ private struct RuleRow: View {
             HStack(spacing: 6) {
                 // Model pattern (left)
                 if isWildcard {
-                    HStack(spacing: 4) {
-                        Text("*")
-                            .font(.system(.caption, design: .monospaced, weight: .semibold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(
-                                Capsule().fill(.quaternary)
-                            )
+                    HStack(spacing: DS.gapXS) {
+                        StatusBadge("*", color: .secondary)
                         Text("所有")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -235,23 +229,14 @@ private struct RuleRow: View {
                 } label: {
                     Image(systemName: "trash")
                         .font(.caption2)
-                        .foregroundColor(isWildcard ? .gray.opacity(0.3) : .red)
+                        .foregroundStyle(isWildcard ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.red))
                 }
                 .buttonStyle(.borderless)
                 .disabled(isWildcard)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, DS.gapS)
             .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isWildcard ? Color.gray.opacity(0.04) : Color(nsColor: .controlBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.gray.opacity(isWildcard ? 0.2 : 0.3),
-                            style: StrokeStyle(lineWidth: 1,
-                                               dash: isWildcard ? [4, 3] : []))
-            )
+            .ruleRowSurface(wildcard: isWildcard)
         }
         .padding(.vertical, 2)
         .onAppear {
@@ -284,7 +269,7 @@ private struct BranchConnector: View {
                     control: CGPoint(x: 1, y: size.height / 2)
                 )
             }
-            context.stroke(path, with: .color(.gray.opacity(0.3)), lineWidth: 1)
+            context.stroke(path, with: .color(Color(nsColor: .separatorColor)), lineWidth: 1)
         }
     }
 }

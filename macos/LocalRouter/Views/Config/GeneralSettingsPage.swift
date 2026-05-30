@@ -10,10 +10,6 @@ struct GeneralSettingsPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("通用设置")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
                 if let draft = configStore.draft {
                     Form {
                         Section("服务器") {
@@ -100,8 +96,9 @@ struct GeneralSettingsPage: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .padding()
+            .padding(DS.padPage)
         }
+        .contentScroll()
         .task {
             do {
                 autostartStatus = try await appState.apiClient.fetchAutostartStatus()

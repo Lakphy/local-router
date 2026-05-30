@@ -8,7 +8,7 @@ import { type LogSessionIdentity, resolveLogSessionIdentity } from './log-sessio
 import type { LogEvent } from './logger';
 import { extractTokenUsageSummaryFromLogEvent, type TokenUsageSummary } from './token-usage';
 
-export type LogQueryWindow = '1h' | '6h' | '24h';
+export type LogQueryWindow = '1h' | '6h' | '24h' | '7d' | '1mo' | '1y';
 export type LogSort = 'time_desc' | 'time_asc';
 export type LogLevel = 'info' | 'error';
 export type StatusClass = '2xx' | '4xx' | '5xx' | 'network_error';
@@ -17,6 +17,9 @@ const WINDOW_MS: Record<LogQueryWindow, number> = {
   '1h': 60 * 60 * 1000,
   '6h': 6 * 60 * 60 * 1000,
   '24h': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  '1mo': 30 * 24 * 60 * 60 * 1000,
+  '1y': 365 * 24 * 60 * 60 * 1000,
 };
 
 const MAX_LINES_SCANNED = 250_000;
@@ -1043,7 +1046,14 @@ async function scanEvents(
 }
 
 export function isLogQueryWindow(value: string): value is LogQueryWindow {
-  return value === '1h' || value === '6h' || value === '24h';
+  return (
+    value === '1h' ||
+    value === '6h' ||
+    value === '24h' ||
+    value === '7d' ||
+    value === '1mo' ||
+    value === '1y'
+  );
 }
 
 export function getLogQueryWindowMs(window: LogQueryWindow): number {

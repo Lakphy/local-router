@@ -35,7 +35,6 @@ struct LogStatsBarView: View {
         }
         .frame(width: cardWidth, alignment: .leading)
         .padding(10)
-        .background(.background.secondary)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .cardSurface()
     }
 }

@@ -8,28 +8,15 @@ struct SessionsPage: View {
     var body: some View {
         @Bindable var store = store
 
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            VStack(alignment: .leading, spacing: 2) {
-                Text("用户会话")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                Text("按用户和会话聚合日志")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .padding()
-
-            Divider()
-
+        VStack(spacing: 0) {
             // Filters
             HStack(spacing: 12) {
                 Picker("时间窗口", selection: $store.window) {
-                    ForEach(MetricsWindow.allCases, id: \.self) { w in
+                    ForEach(LogQueryWindow.allCases, id: \.self) { w in
                         Text(w.displayName).tag(w)
                     }
                 }
-                .frame(width: 120)
+                .frame(width: 160)
 
                 TextField("用户", text: $store.user)
                     .textFieldStyle(.roundedBorder)
@@ -41,15 +28,20 @@ struct SessionsPage: View {
 
                 Spacer()
 
+                if store.loading {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
                 Button("查询") {
                     Task { await store.fetchData(api: appState.apiClient) }
                 }
-                .buttonStyle(.bordered)
+                .secondaryActionStyle()
+                .keyboardShortcut(.return, modifiers: [])
+                .disabled(store.loading)
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
-
-            Divider()
 
             // Summary
             if let summary = store.response?.summary {
@@ -60,99 +52,12 @@ struct SessionsPage: View {
                     StatBoxView("独立会话", value: Formatters.formatNumber(summary.uniqueSessions))
                 }
                 .padding(.horizontal)
-                .padding(.vertical, 8)
-
-                Divider()
+                .padding(.bottom, 8)
             }
 
-            // User list
-            if store.loading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let users = store.response?.users, !users.isEmpty {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 1) {
-                        ForEach(users) { user in
-                            VStack(alignment: .leading, spacing: 0) {
-                                // User header (clickable to toggle)
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        if expandedUsers.contains(user.userKey) {
-                                            expandedUsers.remove(user.userKey)
-                                        } else {
-                                            expandedUsers.insert(user.userKey)
-                                        }
-                                    }
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: expandedUsers.contains(user.userKey) ? "chevron.down" : "chevron.right")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                            .frame(width: 12)
+            Divider()
 
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(user.userKey)
-                                                .fontWeight(.medium)
-                                            Text("\(user.sessionCount) 会话 · \(user.requestCount) 请求")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        Spacer()
-                                        Text(Formatters.formatDateTime(user.lastSeenAt))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-
-                                // Sessions (expanded)
-                                if expandedUsers.contains(user.userKey) {
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        ForEach(user.sessions) { session in
-                                            HStack {
-                                                VStack(alignment: .leading, spacing: 2) {
-                                                    Text(session.sessionId)
-                                                        .font(.system(.caption, design: .monospaced))
-                                                    Text("\(session.requestCount) 请求")
-                                                        .font(.caption2)
-                                                        .foregroundStyle(.secondary)
-                                                }
-                                                Spacer()
-                                                Text(Formatters.formatDateTime(session.lastSeenAt))
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-
-                                                Button("查看日志") {
-                                                    navigateToLogs(user: user.userKey, session: session.sessionId)
-                                                }
-                                                .buttonStyle(.borderless)
-                                                .font(.caption)
-                                            }
-                                            .padding(.horizontal, 12)
-                                            .padding(.leading, 24)
-                                            .padding(.vertical, 6)
-                                        }
-                                    }
-                                }
-
-                                Divider()
-                            }
-                        }
-                    }
-                }
-            } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "person.2")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                    Text("暂无用户会话数据")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+            content
         }
         .task {
             await store.fetchData(api: appState.apiClient)
@@ -160,6 +65,90 @@ struct SessionsPage: View {
                 expandedUsers = Set(users.map(\.userKey))
             }
         }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let users = store.response?.users, !users.isEmpty {
+            // Keep showing existing data while a refetch is in flight (no blocking
+            // spinner) — the sessions query is server-side expensive, so a full-screen
+            // ProgressView on every visit makes the page feel frozen.
+            List {
+                ForEach(users) { user in
+                    DisclosureGroup(isExpanded: expansionBinding(user.userKey)) {
+                        ForEach(user.sessions) { session in
+                            sessionRow(user: user, session: session)
+                        }
+                    } label: {
+                        userRow(user)
+                    }
+                }
+            }
+            .listStyle(.inset)
+            .contentScroll()
+        } else if store.loading {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ContentUnavailableView(
+                "暂无用户会话数据",
+                systemImage: "person.2",
+                description: Text("调整筛选条件后点击查询")
+            )
+        }
+    }
+
+    private func userRow(_ user: LogUserSummary) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(user.userKey)
+                    .fontWeight(.medium)
+                Text("\(user.sessionCount) 会话 · \(user.requestCount) 请求")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(Formatters.formatDateTime(user.lastSeenAt))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func sessionRow(user: LogUserSummary, session: LogSessionSummary) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(session.sessionId)
+                    .font(.system(.caption, design: .monospaced))
+                Text("\(session.requestCount) 请求")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(Formatters.formatDateTime(session.lastSeenAt))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button("查看日志") {
+                navigateToLogs(user: user.userKey, session: session.sessionId)
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func expansionBinding(_ key: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedUsers.contains(key) },
+            set: { isExpanded in
+                if isExpanded {
+                    expandedUsers.insert(key)
+                } else {
+                    expandedUsers.remove(key)
+                }
+            }
+        )
     }
 
     private func navigateToLogs(user: String, session: String) {

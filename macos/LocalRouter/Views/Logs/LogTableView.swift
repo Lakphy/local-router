@@ -12,15 +12,18 @@ struct LogTableView: View {
             if store.loading {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let error = store.error, store.items.isEmpty {
+                ContentUnavailableView(
+                    "日志查询失败",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(error)
+                )
             } else if store.items.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "doc.text")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                    Text("暂无日志")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ContentUnavailableView(
+                    "暂无日志",
+                    systemImage: "doc.text.magnifyingglass",
+                    description: Text("调整筛选条件后点击查询")
+                )
             } else {
                 Table(store.items, selection: $selectedLogId) {
                     TableColumn("时间") { item in
@@ -37,33 +40,77 @@ struct LogTableView: View {
                     TableColumn("服务商") { item in
                         Text(item.provider)
                             .font(.caption)
-                    }
-                    .width(min: 60, ideal: 80)
-
-                    TableColumn("模型") { item in
-                        Text(item.model)
-                            .font(.system(.caption, design: .monospaced))
                             .lineLimit(1)
                     }
-                    .width(min: 80, ideal: 140)
+                    .width(min: 60, ideal: 90)
 
-                    TableColumn("状态") { item in
-                        StatusBadge.forStatusClass(item.statusClass)
+                    TableColumn("路由") { item in
+                        Text(item.routeType)
+                            .font(.caption)
+                            .lineLimit(1)
                     }
-                    .width(50)
+                    .width(min: 60, ideal: 90)
+
+                    TableColumn("模型链路") { item in
+                        Text("\(item.modelIn) → \(item.modelOut)")
+                            .font(.system(.caption, design: .monospaced))
+                            .lineLimit(1)
+                            .help("\(item.modelIn) → \(item.modelOut)")
+                    }
+                    .width(min: 120, ideal: 200)
+
+                    TableColumn("消息") { item in
+                        Text(item.message)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .help(item.message)
+                    }
+                    .width(min: 100, ideal: 180)
 
                     TableColumn("延迟") { item in
                         Text(Formatters.formatLatency(item.latencyMs))
                             .font(.caption)
                     }
                     .width(60)
+
+                    TableColumn("Usage") { item in
+                        tokenUsageCell(item.tokenUsage)
+                    }
+                    .width(min: 130, ideal: 180)
+
+                    TableColumn("状态") { item in
+                        StatusBadge.forStatusClass(item.statusClass)
+                    }
+                    .width(50)
+
+                    TableColumn("会话") { item in
+                        Text(item.sessionId ?? "-")
+                            .font(.system(.caption, design: .monospaced))
+                            .lineLimit(1)
+                            .foregroundStyle(item.sessionId == nil ? .secondary : .primary)
+                    }
+                    .width(min: 80, ideal: 160)
                 }
-                .onChange(of: selectedLogId) { _, newId in
-                    if let id = newId {
+                .contextMenu(forSelectionType: String.self) { ids in
+                    if let id = ids.first {
+                        Button {
+                            openLogDetailInBrowser(id: id)
+                        } label: {
+                            Label("在浏览器打开", systemImage: "safari")
+                        }
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(id, forType: .string)
+                        } label: {
+                            Label("复制 ID", systemImage: "doc.on.doc")
+                        }
+                    }
+                } primaryAction: { ids in
+                    if let id = ids.first {
                         openLogDetailInBrowser(id: id)
-                        selectedLogId = nil
                     }
                 }
+                .contentScroll()
 
                 if store.hasMore {
                     Button {
@@ -80,6 +127,24 @@ struct LogTableView: View {
                     .padding(8)
                 }
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func tokenUsageCell(_ usage: TokenUsageSummary?) -> some View {
+        if let usage {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("in \(Formatters.formatCompact(usage.inputTokens)) · out \(Formatters.formatCompact(usage.outputTokens))")
+                Text("total \(Formatters.formatCompact(usage.totalTokens)) · cache \(Formatters.formatPercent(usage.cacheHitRate ?? 0))")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption2)
+            .lineLimit(1)
+        } else {
+            Text("-")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 

@@ -6,10 +6,6 @@ struct LogsSettingsPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("日志设置")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
                 if configStore.draft != nil {
                     Form {
                         Section("日志记录") {
@@ -89,8 +85,9 @@ struct LogsSettingsPage: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .padding()
+            .padding(DS.padPage)
         }
+        .contentScroll()
     }
 
     private func logBinding(_ keyPath: WritableKeyPath<LogConfig, Bool?>, default defaultValue: Bool) -> Binding<Bool> {

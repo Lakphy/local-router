@@ -21,6 +21,18 @@ enum NavigationPage: String, CaseIterable, Hashable {
         }
     }
 
+    var subtitle: String {
+        switch self {
+        case .dashboard: "Local Router 服务状态与配置概览"
+        case .logs: "查询和分析请求日志"
+        case .sessions: "按用户和会话聚合日志"
+        case .generalSettings: "服务器与启动选项"
+        case .providers: "管理上游服务商与模型"
+        case .routes: "管理协议入口与模型路由映射"
+        case .logsSettings: "日志记录与存储策略"
+        }
+    }
+
     var icon: String {
         switch self {
         case .dashboard: "gauge"

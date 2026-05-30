@@ -11,22 +11,42 @@ struct LogFilterView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 Picker("时间窗口", selection: $store.window) {
-                    ForEach(MetricsWindow.allCases, id: \.self) { w in
+                    ForEach(LogQueryWindow.allCases, id: \.self) { w in
                         Text(w.displayName).tag(w)
                     }
                 }
-                .frame(width: 120)
+                .frame(width: 160)
 
                 TextField("会话 ID", text: $store.session)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 160)
 
-                Button("高级筛选") {
-                    showAdvanced.toggle()
+                Button {
+                    withAnimation(.smooth) { showAdvanced.toggle() }
+                } label: {
+                    Label("高级筛选", systemImage: showAdvanced ? "chevron.up" : "chevron.down")
+                        .labelStyle(.titleAndIcon)
                 }
                 .buttonStyle(.borderless)
 
                 Spacer()
+
+                Toggle(isOn: Binding(
+                    get: { store.realtimeEnabled },
+                    set: { enabled in
+                        if enabled {
+                            store.startRealtime(wsURL: appState.connectionSettings.wsURL)
+                        } else {
+                            store.stopRealtime()
+                        }
+                    }
+                )) {
+                    Text("实时").fixedSize()
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .fixedSize()
+                .disabled(!store.canEnableRealtime)
 
                 Button("重置") {
                     store.resetFilters()
@@ -36,13 +56,8 @@ struct LogFilterView: View {
                 Button("查询") {
                     Task { await store.fetchFirstPage(api: appState.apiClient) }
                 }
-                .buttonStyle(.bordered)
-
-                Menu("导出") {
-                    Button("CSV") { exportLogs(format: .csv) }
-                    Button("JSON") { exportLogs(format: .json) }
-                }
-                .menuStyle(.borderlessButton)
+                .secondaryActionStyle()
+                .keyboardShortcut(.return, modifiers: [])
             }
 
             if showAdvanced {
@@ -91,24 +106,10 @@ struct LogFilterView: View {
                         .frame(width: 120)
                     }
                 }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-    }
-
-    private func exportLogs(format: ExportFormat) {
-        Task {
-            let params = LogQueryParams(window: store.window)
-            guard let data = try? await appState.apiClient.exportLogEvents(params: params, format: format) else { return }
-
-            let panel = NSSavePanel()
-            panel.nameFieldStringValue = "logs-export.\(format.rawValue)"
-            panel.allowedContentTypes = format == .csv ? [.commaSeparatedText] : [.json]
-
-            if panel.runModal() == .OK, let url = panel.url {
-                try? data.write(to: url)
-            }
-        }
     }
 }

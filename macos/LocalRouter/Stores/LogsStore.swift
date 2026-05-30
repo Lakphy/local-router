@@ -3,7 +3,7 @@ import Foundation
 @Observable
 final class LogsStore {
     // Filters
-    var window: MetricsWindow = .twentyFourHours
+    var window: LogQueryWindow = .twentyFourHours
     var fromDate: String?
     var toDate: String?
     var levels: [LogLevel] = []
@@ -40,11 +40,36 @@ final class LogsStore {
         sort == .timeDesc && toDate == nil
     }
 
+    // Time range pinned at the start of a query so that cursor-based pagination
+    // stays valid. `window=24h` resolves to `[now-24h, now]` server-side on every
+    // request, and the resolved range is baked into the cursor's hash — so without
+    // pinning, "load more" a few seconds later is rejected as a cursor mismatch.
+    private var pinnedFrom: String?
+    private var pinnedTo: String?
+
+    private static let isoFormatter = ISO8601DateFormatter()
+
+    private func pinRangeForNewQuery() {
+        guard fromDate == nil && toDate == nil else {
+            pinnedFrom = nil
+            pinnedTo = nil
+            return
+        }
+        let now = Date()
+        pinnedTo = Self.isoFormatter.string(from: now)
+        pinnedFrom = Self.isoFormatter.string(from: now.addingTimeInterval(-window.seconds))
+    }
+
     private var currentParams: LogQueryParams {
         var params = LogQueryParams()
-        params.window = window
-        params.from = fromDate
-        params.to = toDate
+        if let pinnedFrom, let pinnedTo {
+            params.from = pinnedFrom
+            params.to = pinnedTo
+        } else {
+            params.window = window
+            params.from = fromDate
+            params.to = toDate
+        }
         params.levels = levels.isEmpty ? nil : levels
         params.provider = provider
         params.routeType = routeType
@@ -65,6 +90,7 @@ final class LogsStore {
         loading = true
         error = nil
         nextCursor = nil
+        pinRangeForNewQuery()
         do {
             let response = try await api.fetchLogEvents(params: currentParams)
             items = response.items

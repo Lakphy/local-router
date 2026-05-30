@@ -8,7 +8,7 @@ import {
 import { LogRealtimeClient, type LogRealtimeStatus } from '@/lib/log-realtime-client';
 
 export interface LogFilters {
-  window: '1h' | '6h' | '24h';
+  window: '1h' | '6h' | '24h' | '7d' | '1mo' | '1y';
   from: string;
   to: string;
   levels: Array<'info' | 'error'>;

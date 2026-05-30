@@ -23,5 +23,6 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("Local Router")
+        .tint(.accentColor)
     }
 }

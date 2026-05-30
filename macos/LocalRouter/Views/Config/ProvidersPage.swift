@@ -66,7 +66,7 @@ struct ProvidersPage: View {
                 .controlSize(.small)
                 .padding(8)
             }
-            .frame(minWidth: 180, idealWidth: 220, maxWidth: 280)
+            .frame(minWidth: 180, idealWidth: 220, maxWidth: 280, maxHeight: .infinity)
 
             // Right: provider form
             if let name = selectedProvider, let provider = draftProviders[name] {
@@ -77,17 +77,13 @@ struct ProvidersPage: View {
                         configStore.updateDraft { $0.providers[name] = updated }
                     }
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "server.rack")
-                        .font(.system(size: 32))
-                        .foregroundStyle(.tertiary)
-                    Text(orderedNames.isEmpty
-                         ? "点击下方按钮添加服务商"
-                         : "选择一个服务商")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                ContentUnavailableView(
+                    orderedNames.isEmpty ? "暂无服务商" : "未选择服务商",
+                    systemImage: "server.rack",
+                    description: Text(orderedNames.isEmpty ? "点击左下角按钮添加服务商" : "从左侧选择一个服务商进行编辑")
+                )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -106,25 +102,10 @@ struct ProvidersPage: View {
             Text("确定要删除服务商「\(providerToDelete)」吗？引用此服务商的路由规则将失效。")
         }
         .sheet(isPresented: $showAddSheet) {
-            VStack(spacing: 16) {
-                Text("添加服务商")
-                    .font(.headline)
-                TextField("名称", text: $newProviderName)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
-                HStack {
-                    Button("取消") { showAddSheet = false }
-                        .buttonStyle(.bordered)
-                    Button("添加") {
-                        addProvider(name: newProviderName)
-                        showAddSheet = false
-                        newProviderName = ""
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(newProviderName.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
+            AddProviderSheet(name: $newProviderName) { name in
+                addProvider(name: name)
+                newProviderName = ""
             }
-            .padding(24)
         }
     }
 
@@ -180,6 +161,42 @@ struct ProvidersPage: View {
     }
 }
 
+// MARK: - Add Provider Sheet
+
+private struct AddProviderSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var name: String
+    let onAdd: (String) -> Void
+
+    private var trimmed: String {
+        name.trimmingCharacters(in: .whitespaces)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("名称", text: $name)
+                    .textFieldStyle(.roundedBorder)
+            }
+            .formStyle(.grouped)
+            .navigationTitle("添加服务商")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("添加") {
+                        onAdd(trimmed)
+                        dismiss()
+                    }
+                    .disabled(trimmed.isEmpty)
+                }
+            }
+        }
+        .frame(minWidth: 360, minHeight: 180)
+    }
+}
+
 // MARK: - Provider Card
 
 private struct ProviderCard: View {
@@ -187,19 +204,12 @@ private struct ProviderCard: View {
     let provider: ProviderConfig
 
     var body: some View {
-        HStack(spacing: 8) {
-            // Drag handle - 6 dots (2x3 grid)
-            VStack(spacing: 2) {
-                ForEach(0..<3, id: \.self) { _ in
-                    HStack(spacing: 2) {
-                        Circle().frame(width: 3, height: 3)
-                        Circle().frame(width: 3, height: 3)
-                    }
-                }
-            }
-            .foregroundStyle(.quaternary)
+        HStack(spacing: DS.gapS) {
+            Image(systemName: "line.3.horizontal")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.gapXS) {
                 Text(name)
                     .font(.system(.subheadline, weight: .medium))
                     .lineLimit(1)

@@ -17,6 +17,8 @@ struct CopyButton: View {
         } label: {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 .font(.caption)
+                .foregroundStyle(copied ? Color.green : Color.secondary)
+                .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.borderless)
         .help("复制到剪贴板")

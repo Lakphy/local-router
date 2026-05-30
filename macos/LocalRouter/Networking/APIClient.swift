@@ -244,7 +244,7 @@ final class APIClient {
 // MARK: - Query Params
 
 struct LogQueryParams {
-    var window: MetricsWindow?
+    var window: LogQueryWindow?
     var from: String?
     var to: String?
     var levels: [LogLevel]?
@@ -291,7 +291,7 @@ struct LogQueryParams {
 }
 
 struct SessionQueryParams {
-    var window: MetricsWindow?
+    var window: LogQueryWindow?
     var from: String?
     var to: String?
     var user: String?
