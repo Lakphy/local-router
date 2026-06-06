@@ -38,8 +38,8 @@ function createSummary(
 function createEventsResponse(overrides: Partial<LogEventsResponse> = {}): LogEventsResponse {
   return {
     items: [createSummary('log-1', '2026-03-16T10:00:00.000Z')],
-    nextCursor: 'cursor-1',
-    hasMore: true,
+    nextCursor: null,
+    hasMore: false,
     stats: {
       total: 1,
       errorCount: 0,
@@ -157,14 +157,54 @@ describe('logs store', () => {
     expect(calls[0]?.signal).toBeInstanceOf(AbortSignal);
     expect(state.loading).toBe(false);
     expect(state.items.map((item) => item.id)).toEqual(['log-2']);
-    expect(state.nextCursor).toBe('cursor-1');
-    expect(state.hasMore).toBe(true);
+    expect(state.currentPage).toBe(1);
     expect(state.stats?.total).toBe(12);
     expect(state.meta?.indexUsed).toBe(true);
     expect(state.appliedQuery?.levels).toEqual(['error']);
     expect(state.appliedQuery?.provider).toBe('openai');
     expect(state.appliedQuery?.hasError).toBe(true);
     expect(state.realtime.enabled).toBe(false);
+  });
+
+  test('fetchFirstPage 应根据 stats.total 计算 totalPages', async () => {
+    globalThis.fetch = (() =>
+      Promise.resolve(
+        jsonResponse(
+          createEventsResponse({
+            items: Array.from({ length: 50 }, (_, i) =>
+              createSummary(`log-${i}`, `2026-03-16T10:00:${String(i).padStart(2, '0')}.000Z`)
+            ),
+            stats: {
+              total: 120,
+              errorCount: 0,
+              errorRate: 0,
+              avgLatencyMs: 100,
+              p95LatencyMs: 100,
+              tokenUsageCount: 0,
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
+              cachedInputTokens: 0,
+              cacheHitInputTokens: 0,
+              cacheHitRate: 0,
+              cacheHitRateDenominatorTokens: 0,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+              cacheWriteInputTokens: 0,
+              cacheMissInputTokens: 0,
+              reasoningTokens: 0,
+              billableInputTokens: 0,
+              billableOutputTokens: 0,
+            },
+          })
+        )
+      )) as typeof fetch;
+
+    await useLogsStore.getState().fetchFirstPage();
+
+    const state = useLogsStore.getState();
+    expect(state.currentPage).toBe(1);
+    expect(state.totalPages).toBe(3); // ceil(120 / 50) = 3
   });
 
   test('fetchFirstPage 连续触发时应中断旧请求且忽略晚返回的旧响应', async () => {
@@ -205,16 +245,17 @@ describe('logs store', () => {
     expect(state.loading).toBe(false);
   });
 
-  test('fetchNextPage 应使用 cursor 翻页、按时间合并去重并更新分页状态', async () => {
+  test('fetchPage 应使用 offset 翻页并替换 items', async () => {
     let capturedUrl = '';
 
     useLogsStore.setState({
       items: [
-        createSummary('log-1', '2026-03-16T10:00:01.000Z', { message: 'old copy' }),
+        createSummary('log-1', '2026-03-16T10:00:01.000Z'),
         createSummary('log-2', '2026-03-16T10:00:02.000Z'),
       ],
-      nextCursor: 'cursor-1',
-      hasMore: true,
+      currentPage: 1,
+      totalPages: 3,
+      pageSize: 50,
       sort: 'time_desc',
     });
 
@@ -224,39 +265,68 @@ describe('logs store', () => {
         jsonResponse(
           createEventsResponse({
             items: [
-              createSummary('log-3', '2026-03-16T10:00:03.000Z'),
-              createSummary('log-1', '2026-03-16T10:00:01.000Z', { message: 'new copy' }),
+              createSummary('log-51', '2026-03-16T09:59:01.000Z'),
+              createSummary('log-52', '2026-03-16T09:59:02.000Z'),
             ],
-            nextCursor: null,
-            hasMore: false,
+            stats: {
+              total: 120,
+              errorCount: 0,
+              errorRate: 0,
+              avgLatencyMs: 100,
+              p95LatencyMs: 100,
+              tokenUsageCount: 0,
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
+              cachedInputTokens: 0,
+              cacheHitInputTokens: 0,
+              cacheHitRate: 0,
+              cacheHitRateDenominatorTokens: 0,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+              cacheWriteInputTokens: 0,
+              cacheMissInputTokens: 0,
+              reasoningTokens: 0,
+              billableInputTokens: 0,
+              billableOutputTokens: 0,
+            },
           })
         )
       );
     }) as typeof fetch;
 
-    await useLogsStore.getState().fetchNextPage();
+    await useLogsStore.getState().fetchPage(2);
 
     const url = new URL(capturedUrl, 'http://localhost');
     const state = useLogsStore.getState();
-    expect(url.searchParams.get('cursor')).toBe('cursor-1');
-    expect(state.items.map((item) => item.id)).toEqual(['log-3', 'log-2', 'log-1']);
-    expect(state.items.find((item) => item.id === 'log-1')?.message).toBe('new copy');
-    expect(state.nextCursor).toBeNull();
-    expect(state.hasMore).toBe(false);
-    expect(state.loadingMore).toBe(false);
+    expect(url.searchParams.get('offset')).toBe('50');
+    expect(url.searchParams.has('cursor')).toBe(false);
+    expect(state.items.map((item) => item.id)).toEqual(['log-51', 'log-52']);
+    expect(state.currentPage).toBe(2);
+    expect(state.totalPages).toBe(3);
+    expect(state.loading).toBe(false);
   });
 
-  test('fetchNextPage 在没有 cursor 或正在加载时不发起请求', async () => {
+  test('fetchPage 在越界或当前页或正在加载时不发起请求', async () => {
     let callCount = 0;
     globalThis.fetch = (() => {
       callCount += 1;
       return Promise.resolve(jsonResponse(createEventsResponse()));
     }) as typeof fetch;
 
-    await useLogsStore.getState().fetchNextPage();
+    // No totalPages set (default 1), page 2 is out of range
+    await useLogsStore.getState().fetchPage(2);
 
-    useLogsStore.setState({ nextCursor: 'cursor-1', loadingMore: true });
-    await useLogsStore.getState().fetchNextPage();
+    // Same page
+    useLogsStore.setState({ currentPage: 1, totalPages: 3 });
+    await useLogsStore.getState().fetchPage(1);
+
+    // Page < 1
+    await useLogsStore.getState().fetchPage(0);
+
+    // Loading
+    useLogsStore.setState({ loading: true });
+    await useLogsStore.getState().fetchPage(2);
 
     expect(callCount).toBe(0);
   });
@@ -283,9 +353,10 @@ describe('logs store', () => {
     expect(state.realtime.status).toBe('idle');
   });
 
-  test('receiveRealtimeLogEvents 应批量合并去重并更新接收计数', () => {
+  test('receiveRealtimeLogEvents 应在第一页时合并去重并更新接收计数', () => {
     useLogsStore.setState({
       sort: 'time_desc',
+      currentPage: 1,
       items: [
         createSummary('log-1', '2026-03-16T10:00:01.000Z', { message: 'old copy' }),
         createSummary('log-2', '2026-03-16T10:00:02.000Z'),
@@ -303,6 +374,26 @@ describe('logs store', () => {
     expect(state.items.map((item) => item.id)).toEqual(['log-3', 'log-2', 'log-1']);
     expect(state.items.find((item) => item.id === 'log-1')?.message).toBe('new copy');
     expect(state.realtime.received).toBe(2);
+  });
+
+  test('receiveRealtimeLogEvents 不在第一页时只更新计数不修改 items', () => {
+    useLogsStore.setState({
+      sort: 'time_desc',
+      currentPage: 2,
+      items: [
+        createSummary('log-51', '2026-03-16T09:59:01.000Z'),
+      ],
+    });
+
+    useLogsStore
+      .getState()
+      .receiveRealtimeLogEvents([
+        createSummary('log-new', '2026-03-16T10:00:03.000Z'),
+      ]);
+
+    const state = useLogsStore.getState();
+    expect(state.items.map((item) => item.id)).toEqual(['log-51']);
+    expect(state.realtime.received).toBe(1);
   });
 
   test('startRealtime 在没有已查询快照时应拒绝开启', async () => {

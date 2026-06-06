@@ -44,6 +44,7 @@ export interface IndexedLogQuery {
   sort: IndexedLogSort;
   limit: number;
   cursor: string | null;
+  offset?: number;
 }
 
 export interface IndexedLogEventSummary {
@@ -901,6 +902,8 @@ class LogIndex {
       }
     }
 
+    const useOffset = !query.cursor && (query.offset ?? 0) > 0;
+
     const { whereSql, params, usesFts } = buildWhereClause(query, options);
     const cursorClause = decodedCursor
       ? query.sort === 'time_desc'
@@ -915,6 +918,8 @@ class LogIndex {
         ? 'ORDER BY e.ts_ms DESC, e.id DESC'
         : 'ORDER BY e.ts_ms ASC, e.id ASC';
     const limit = Math.max(1, query.limit);
+    const offsetClause = useOffset ? 'OFFSET ?' : '';
+    const offsetParams = useOffset ? [query.offset!] : [];
 
     let rows: LogEventRow[];
     try {
@@ -930,8 +935,9 @@ class LogIndex {
           ${cursorClause}
           ${orderSql}
           LIMIT ?
+          ${offsetClause}
         `)
-        .all(...params, ...cursorParams, limit + 1) as LogEventRow[];
+        .all(...params, ...cursorParams, limit + 1, ...offsetParams) as LogEventRow[];
     } catch (err) {
       if (!usesFts) throw err;
       const fallback = this.queryEvents(query, { forceLikeSearch: true });
@@ -955,15 +961,15 @@ class LogIndex {
     return {
       items: pageRows.map(rowToSummary),
       nextCursor:
-        hasMore && lastRow
-          ? encodeCursor({
+        useOffset || !hasMore || !lastRow
+          ? null
+          : encodeCursor({
               v: 2,
               sort: query.sort,
               tsMs: lastRow.ts_ms,
               id: lastRow.id,
               queryHash,
-            })
-          : null,
+            }),
       hasMore,
       stats,
       meta: {

@@ -10,6 +10,15 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -62,6 +71,35 @@ function formatPercent(value: number | null | undefined): string {
   return `${(value ?? 0).toFixed(2).replace(/\.?0+$/, '')}%`;
 }
 
+function generatePageNumbers(
+  current: number,
+  total: number
+): Array<number | 'ellipsis'> {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+
+  const pages: Array<number | 'ellipsis'> = [1];
+
+  if (current > 3) {
+    pages.push('ellipsis');
+  }
+
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let i = start; i <= end; i++) {
+    pages.push(i);
+  }
+
+  if (current < total - 2) {
+    pages.push('ellipsis');
+  }
+
+  pages.push(total);
+
+  return pages;
+}
+
 export function LogsPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: '/logs' });
@@ -70,11 +108,11 @@ export function LogsPage() {
   const sort = useLogsStore((s) => s.sort);
   const appliedQuery = useLogsStore((s) => s.appliedQuery);
   const items = useLogsStore((s) => s.items);
-  const hasMore = useLogsStore((s) => s.hasMore);
+  const currentPage = useLogsStore((s) => s.currentPage);
+  const totalPages = useLogsStore((s) => s.totalPages);
   const stats = useLogsStore((s) => s.stats);
   const meta = useLogsStore((s) => s.meta);
   const loading = useLogsStore((s) => s.loading);
-  const loadingMore = useLogsStore((s) => s.loadingMore);
   const error = useLogsStore((s) => s.error);
   const realtime = useLogsStore((s) => s.realtime);
 
@@ -82,7 +120,7 @@ export function LogsPage() {
   const setSort = useLogsStore((s) => s.setSort);
   const applyFilters = useLogsStore((s) => s.applyFilters);
   const resetFilters = useLogsStore((s) => s.resetFilters);
-  const fetchNextPage = useLogsStore((s) => s.fetchNextPage);
+  const fetchPage = useLogsStore((s) => s.fetchPage);
   const startRealtime = useLogsStore((s) => s.startRealtime);
   const stopRealtime = useLogsStore((s) => s.stopRealtime);
 
@@ -554,15 +592,57 @@ export function LogsPage() {
             />
 
             <div className="flex items-center justify-between gap-2">
-              <div className="text-xs text-muted-foreground">已加载 {items.length} 条</div>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!hasMore || loadingMore}
-                onClick={() => void fetchNextPage()}
-              >
-                {loadingMore ? '加载中...' : hasMore ? '加载更多' : '已到底部'}
-              </Button>
+              <div className="text-xs text-muted-foreground">
+                第 {currentPage} / {totalPages} 页（共 {stats?.total ?? 0} 条）
+              </div>
+              {totalPages > 1 && (
+                <Pagination className="mx-0 w-auto justify-end">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        onClick={() => void fetchPage(currentPage - 1)}
+                        aria-disabled={currentPage <= 1 || loading}
+                        className={cn(
+                          currentPage <= 1 || loading
+                            ? 'pointer-events-none opacity-50'
+                            : 'cursor-pointer'
+                        )}
+                      />
+                    </PaginationItem>
+                    {generatePageNumbers(currentPage, totalPages).map((page, idx) =>
+                      page === 'ellipsis' ? (
+                        <PaginationItem key={`ellipsis-${idx}`}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      ) : (
+                        <PaginationItem key={page}>
+                          <PaginationLink
+                            isActive={page === currentPage}
+                            onClick={() => void fetchPage(page)}
+                            className={cn(
+                              'cursor-pointer',
+                              loading && 'pointer-events-none opacity-50'
+                            )}
+                          >
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      )
+                    )}
+                    <PaginationItem>
+                      <PaginationNext
+                        onClick={() => void fetchPage(currentPage + 1)}
+                        aria-disabled={currentPage >= totalPages || loading}
+                        className={cn(
+                          currentPage >= totalPages || loading
+                            ? 'pointer-events-none opacity-50'
+                            : 'cursor-pointer'
+                        )}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              )}
             </div>
           </>
         )}

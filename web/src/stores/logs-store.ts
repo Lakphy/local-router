@@ -28,8 +28,9 @@ interface LogsState {
   sort: 'time_desc' | 'time_asc';
   appliedQuery: FetchLogEventsParams | null;
   items: LogEventSummary[];
-  nextCursor: string | null;
-  hasMore: boolean;
+  currentPage: number;
+  totalPages: number;
+  pageSize: number;
   stats: LogEventsResponse['stats'] | null;
   meta: LogEventsResponse['meta'] | null;
   realtime: {
@@ -41,7 +42,6 @@ interface LogsState {
     dropped: number;
   };
   loading: boolean;
-  loadingMore: boolean;
   error: string | null;
 }
 
@@ -51,7 +51,7 @@ interface LogsActions {
   applyFilters: () => Promise<void>;
   resetFilters: () => Promise<void>;
   fetchFirstPage: () => Promise<void>;
-  fetchNextPage: () => Promise<void>;
+  fetchPage: (page: number) => Promise<void>;
   startRealtime: () => Promise<void>;
   stopRealtime: (reason?: string) => void;
   receiveRealtimeLogEvents: (items: LogEventSummary[]) => void;
@@ -74,6 +74,8 @@ const DEFAULT_FILTERS: LogFilters = {
   hasError: 'all',
   q: '',
 };
+
+const DEFAULT_PAGE_SIZE = 50;
 
 let firstPageController: AbortController | null = null;
 let firstPageRequestSeq = 0;
@@ -99,7 +101,9 @@ function createIdleRealtimeState(
   };
 }
 
-function buildRequestParams(state: LogsState, cursor?: string | null): FetchLogEventsParams {
+function buildRequestParams(state: LogsState, page?: number): FetchLogEventsParams {
+  const currentPage = page ?? state.currentPage;
+  const offset = (currentPage - 1) * state.pageSize;
   return {
     window: state.filters.window,
     from: state.filters.from || undefined,
@@ -115,8 +119,8 @@ function buildRequestParams(state: LogsState, cursor?: string | null): FetchLogE
     hasError: state.filters.hasError === 'all' ? undefined : state.filters.hasError === 'true',
     q: state.filters.q || undefined,
     sort: state.sort,
-    limit: 50,
-    cursor: cursor ?? undefined,
+    limit: state.pageSize,
+    offset: offset > 0 ? offset : undefined,
   };
 }
 
@@ -146,18 +150,22 @@ function closeRealtimeClient(reason: string): void {
   client?.close(reason);
 }
 
+function computeTotalPages(total: number, pageSize: number): number {
+  return Math.max(1, Math.ceil(total / pageSize));
+}
+
 export const useLogsStore = create<LogsStore>((set, get) => ({
   filters: { ...DEFAULT_FILTERS },
   sort: 'time_desc',
   appliedQuery: null,
   items: [],
-  nextCursor: null,
-  hasMore: false,
+  currentPage: 1,
+  totalPages: 1,
+  pageSize: DEFAULT_PAGE_SIZE,
   stats: null,
   meta: null,
   realtime: createIdleRealtimeState(),
   loading: false,
-  loadingMore: false,
   error: null,
 
   setFilter: (key, value) => {
@@ -175,11 +183,12 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
   setSort: async (sort) => {
     if (get().sort === sort) return;
     closeRealtimeClient('sort-changed');
-    set({ sort, appliedQuery: null, realtime: createIdleRealtimeState() });
+    set({ sort, appliedQuery: null, currentPage: 1, realtime: createIdleRealtimeState() });
     await get().fetchFirstPage();
   },
 
   applyFilters: async () => {
+    set({ currentPage: 1 });
     await get().fetchFirstPage();
   },
 
@@ -189,6 +198,7 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
       filters: { ...DEFAULT_FILTERS },
       sort: 'time_desc',
       appliedQuery: null,
+      currentPage: 1,
       realtime: createIdleRealtimeState(),
     });
     await get().fetchFirstPage();
@@ -200,12 +210,14 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
     const controller = new AbortController();
     firstPageController = controller;
     const requestSeq = ++firstPageRequestSeq;
-    const querySnapshot = buildRequestParams(get());
+    const state = get();
+    const querySnapshot = buildRequestParams(state, 1);
 
     set({
       loading: true,
       error: null,
       appliedQuery: null,
+      currentPage: 1,
       realtime: createIdleRealtimeState(),
     });
 
@@ -215,18 +227,16 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
       set({
         appliedQuery: querySnapshot,
         items: data.items,
-        nextCursor: data.nextCursor,
-        hasMore: data.hasMore,
+        currentPage: 1,
+        totalPages: computeTotalPages(data.stats?.total ?? 0, state.pageSize),
         stats: data.stats,
         meta: data.meta,
         loading: false,
-        loadingMore: false,
       });
     } catch (err) {
       if (isAbortError(err) || requestSeq !== firstPageRequestSeq) return;
       set({
         loading: false,
-        loadingMore: false,
         error: err instanceof Error ? err.message : '日志查询失败',
       });
     } finally {
@@ -236,27 +246,27 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
     }
   },
 
-  fetchNextPage: async () => {
+  fetchPage: async (page: number) => {
     const state = get();
-    if (!state.nextCursor || state.loadingMore) return;
+    if (page < 1 || page > state.totalPages || page === state.currentPage || state.loading) return;
 
-    set({ loadingMore: true, error: null });
+    set({ loading: true, error: null });
 
     try {
-      const data = await fetchLogEvents(buildRequestParams(state, state.nextCursor));
-      const latest = get();
+      const data = await fetchLogEvents(buildRequestParams(state, page));
       set({
-        items: mergeUniqueById(latest.items, data.items, latest.sort),
-        nextCursor: data.nextCursor,
-        hasMore: data.hasMore,
+        currentPage: page,
+        items: data.items,
+        totalPages: computeTotalPages(data.stats?.total ?? 0, state.pageSize),
         stats: data.stats,
         meta: data.meta,
-        loadingMore: false,
+        loading: false,
       });
     } catch (err) {
+      if (isAbortError(err)) return;
       set({
-        loadingMore: false,
-        error: err instanceof Error ? err.message : '加载更多日志失败',
+        loading: false,
+        error: err instanceof Error ? err.message : '日志查询失败',
       });
     }
   },
@@ -381,11 +391,22 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
 
   receiveRealtimeLogEvents: (items) => {
     if (items.length === 0) return;
-    set((state) => ({
-      items: mergeUniqueById(state.items, items, state.sort),
+    const state = get();
+    // Only merge realtime events when viewing the first page
+    if (state.currentPage !== 1) {
+      set((s) => ({
+        realtime: {
+          ...s.realtime,
+          received: s.realtime.received + items.length,
+        },
+      }));
+      return;
+    }
+    set((s) => ({
+      items: mergeUniqueById(s.items, items, s.sort),
       realtime: {
-        ...state.realtime,
-        received: state.realtime.received + items.length,
+        ...s.realtime,
+        received: s.realtime.received + items.length,
       },
     }));
   },

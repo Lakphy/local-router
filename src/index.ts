@@ -714,6 +714,16 @@ function createAdminApiRoutes(
       const limitRaw = c.req.query('limit');
       const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
 
+      const offsetRaw = c.req.query('offset');
+      const offset = offsetRaw ? Number.parseInt(offsetRaw, 10) : undefined;
+      if (offset !== undefined && (Number.isNaN(offset) || offset < 0)) {
+        return c.json({ error: 'offset 参数必须为非负整数' }, 400);
+      }
+      const cursor = c.req.query('cursor') ?? null;
+      if (cursor && offset !== undefined && offset > 0) {
+        return c.json({ error: 'cursor 和 offset 不能同时使用' }, 400);
+      }
+
       const data = await queryLogEvents(
         { logConfig: config.log },
         {
@@ -731,7 +741,8 @@ function createAdminApiRoutes(
           q: c.req.query('q') ?? '',
           sort: sortRaw,
           limit,
-          cursor: c.req.query('cursor') ?? null,
+          cursor,
+          offset,
         }
       );
 

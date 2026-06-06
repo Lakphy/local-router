@@ -137,6 +137,45 @@ describe('logs web api client', () => {
     );
   });
 
+  test('fetchLogEvents 应正确序列化 offset 参数', async () => {
+    let capturedUrl = '';
+
+    globalThis.fetch = ((input: RequestInfo | URL) => {
+      capturedUrl = String(input);
+      return Promise.resolve(jsonResponse(createEventsResponse()));
+    }) as typeof fetch;
+
+    await fetchLogEvents({
+      window: '24h',
+      sort: 'time_desc',
+      limit: 50,
+      offset: 100,
+    });
+
+    const url = new URL(capturedUrl, 'http://localhost');
+    expect(url.searchParams.get('offset')).toBe('100');
+    expect(url.searchParams.has('cursor')).toBe(false);
+  });
+
+  test('fetchLogEvents offset 为 0 时不应出现在 URL 中', async () => {
+    let capturedUrl = '';
+
+    globalThis.fetch = ((input: RequestInfo | URL) => {
+      capturedUrl = String(input);
+      return Promise.resolve(jsonResponse(createEventsResponse()));
+    }) as typeof fetch;
+
+    await fetchLogEvents({
+      window: '24h',
+      sort: 'time_desc',
+      limit: 50,
+      offset: 0,
+    });
+
+    const url = new URL(capturedUrl, 'http://localhost');
+    expect(url.searchParams.has('offset')).toBe(false);
+  });
+
   test('exportLogEvents 应组合导出格式与当前过滤条件', async () => {
     let capturedUrl = '';
     const blob = new Blob(['id,ts\nlog-1,2026-03-16T10:00:00.000Z\n'], { type: 'text/csv' });

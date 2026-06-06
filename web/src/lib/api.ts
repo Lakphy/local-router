@@ -449,6 +449,7 @@ export interface FetchLogEventsParams {
   sort?: 'time_desc' | 'time_asc';
   limit?: number;
   cursor?: string;
+  offset?: number;
 }
 
 function appendArrayParam(params: URLSearchParams, key: string, values?: string[]): void {
@@ -478,6 +479,7 @@ function buildLogQueryString(paramsInput: FetchLogEventsParams): string {
   if (paramsInput.sort) params.set('sort', paramsInput.sort);
   if (paramsInput.limit) params.set('limit', String(paramsInput.limit));
   if (paramsInput.cursor) params.set('cursor', paramsInput.cursor);
+  if (paramsInput.offset) params.set('offset', String(paramsInput.offset));
 
   return params.toString();
 }

@@ -199,6 +199,7 @@ export interface LogQueryParams {
   sort: LogSort;
   limit: number;
   cursor: string | null;
+  offset: number;
 }
 
 export interface LogEventFacts {
@@ -230,6 +231,7 @@ export interface NormalizedLogQueryInput {
   sort?: LogSort;
   limit?: number;
   cursor?: string | null;
+  offset?: number;
 }
 
 export interface LogQueryContext {
@@ -568,6 +570,7 @@ function normalizeQuery(
     sort,
     limit,
     cursor: input.cursor ?? null,
+    offset: input.offset ?? 0,
   };
 }
 
@@ -1147,16 +1150,17 @@ async function queryLogEventsInternal(
     );
   }
 
-  const offset = query.cursor ? decodeCursor(query.cursor).offset : 0;
+  const offset = query.cursor ? decodeCursor(query.cursor).offset : query.offset;
   const scanned = await scanEvents(baseDir, query);
 
   const pageItems = scanned.items.slice(offset, offset + query.limit);
   const hasMore = scanned.stats.total > offset + query.limit;
   const nextOffset = offset + pageItems.length;
+  const useOffsetMode = !query.cursor && query.offset > 0;
 
   return {
     items: pageItems.map(eventToSummary),
-    nextCursor: hasMore ? encodeCursor({ offset: nextOffset }) : null,
+    nextCursor: useOffsetMode ? null : hasMore ? encodeCursor({ offset: nextOffset }) : null,
     hasMore,
     stats: scanned.stats,
     meta: {
