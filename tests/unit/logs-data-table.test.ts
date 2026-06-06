@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { calculateLogsVirtualRange } from '../../web/src/components/logs/logs-data-table';
+import {
+  calculateLogsVirtualRange,
+  getCacheHitRateRowClass,
+} from '../../web/src/components/logs/logs-data-table';
 
 describe('logs data table virtual range', () => {
   test('应在正常滚动时包含可见行和 overscan', () => {
@@ -24,5 +27,14 @@ describe('logs data table virtual range', () => {
     });
 
     expect(range).toEqual({ start: 0, end: 10 });
+  });
+
+  test('应按缓存命中率返回日志行底色 class', () => {
+    expect(getCacheHitRateRowClass(null)).toBe('');
+    expect(getCacheHitRateRowClass(undefined)).toBe('');
+    expect(getCacheHitRateRowClass(19.99)).toContain('bg-red-50');
+    expect(getCacheHitRateRowClass(20)).toContain('bg-yellow-50');
+    expect(getCacheHitRateRowClass(89.99)).toContain('bg-yellow-50');
+    expect(getCacheHitRateRowClass(90)).toBe('');
   });
 });

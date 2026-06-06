@@ -15,12 +15,24 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { LogEventSummary } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { calculateVirtualRange } from '@/lib/virtual-list';
 import { createLogsColumns } from './logs-columns';
 
 const ROW_HEIGHT = 44;
 
 export { calculateVirtualRange as calculateLogsVirtualRange };
+
+export function getCacheHitRateRowClass(cacheHitRate: number | null | undefined): string {
+  if (cacheHitRate === null || cacheHitRate === undefined) return '';
+  if (cacheHitRate < 20) {
+    return 'bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-950/50';
+  }
+  if (cacheHitRate < 90) {
+    return 'bg-yellow-50 hover:bg-yellow-100 dark:bg-yellow-950/30 dark:hover:bg-yellow-950/50';
+  }
+  return '';
+}
 
 export function LogsDataTable(props: {
   data: LogEventSummary[];
@@ -127,7 +139,10 @@ function DataRow({
 }) {
   return (
     <TableRow
-      className="cursor-pointer"
+      className={cn(
+        'cursor-pointer',
+        getCacheHitRateRowClass(row.original.tokenUsage?.cacheHitRate)
+      )}
       style={{ height: ROW_HEIGHT }}
       onClick={() => onClick(row.original)}
     >
