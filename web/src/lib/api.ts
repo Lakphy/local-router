@@ -8,37 +8,51 @@ interface OneShotSession {
 
 async function createOneShotSession(): Promise<OneShotSession> {
   const client = new CryptoClient();
-  const clientPublicKey = await client.generateKeyPair();
+  try {
+    const clientPublicKey = await client.generateKeyPair();
 
-  const res = await fetch('/api/crypto/handshake', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientPublicKey }),
-  });
+    const res = await fetch('/api/crypto/handshake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientPublicKey }),
+    });
 
-  if (!res.ok) throw new Error('加密握手失败');
+    if (!res.ok) throw new Error('加密握手失败');
 
-  const data = await res.json();
-  await client.deriveKey(data.serverPublicKey);
+    const data = await res.json();
+    await client.deriveKey(data.serverPublicKey);
 
-  return { client, sessionId: data.sessionId };
+    return { client, sessionId: data.sessionId };
+  } catch (err) {
+    client.dispose();
+    throw err;
+  }
+}
+
+async function runWithOneShotSession<T>(
+  action: (session: OneShotSession) => Promise<T>
+): Promise<T> {
+  const session = await createOneShotSession();
+  try {
+    return await action(session);
+  } finally {
+    session.client.dispose();
+  }
 }
 
 async function withOneShotSession<T>(
   action: (session: OneShotSession) => Promise<T>,
   retry401 = true
 ): Promise<T> {
-  const session = await createOneShotSession();
   try {
-    return await action(session);
+    return await runWithOneShotSession(action);
   } catch (err) {
     const status =
       typeof err === 'object' && err !== null && 'status' in err
         ? (err as { status?: number }).status
         : undefined;
     if (retry401 && status === 401) {
-      const retriedSession = await createOneShotSession();
-      return action(retriedSession);
+      return runWithOneShotSession(action);
     }
     throw err;
   }
