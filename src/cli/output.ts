@@ -2,6 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { type CliError, isCliError } from './errors';
 import { DEFAULT_FLAGS, type GlobalFlags } from './global-flags';
 import {
+  renderHuman,
+  renderHumanError,
+  renderHumanStreamEvent,
+  renderHumanValue,
+  stripInlineMarkdown,
+} from './render-human';
+import {
   type JsonErrorEnvelope,
   type JsonResultEnvelope,
   renderJsonError,
@@ -15,7 +22,7 @@ export interface ResultPayload<T = unknown> {
   data: T;
   meta?: Record<string, unknown>;
   warnings?: string[];
-  /** Markdown rendering (used when format=markdown). */
+  /** Rich presentation shared by the human and explicit Markdown renderers. */
   md?: MdSection;
   /** Plain text rendering for --output text. Falls back to compact JSON if missing. */
   text?: string;
@@ -102,7 +109,21 @@ export function emitResult<T>(ctx: OutputContext, payload: ResultPayload<T>): vo
     writeStdout(JSON.stringify(payload.data));
     return;
   }
-  if (payload.md) {
+  if (fmt === 'human') {
+    writeStdout(payload.md ? renderHuman(payload.md) : renderHumanValue(payload.data));
+    if (payload.warnings && payload.warnings.length > 0 && !ctx.flags.quiet) {
+      for (const warning of payload.warnings) {
+        process.stderr.write(`警告: ${stripInlineMarkdown(warning)}\n`);
+      }
+    }
+    if (ctx.flags.explain && payload.next && payload.next.length > 0) {
+      process.stdout.write(
+        `\n下一步:\n${payload.next.map((item) => `  ${item.command}  ${item.reason}`).join('\n')}\n`
+      );
+    }
+    return;
+  }
+  if (fmt === 'markdown' && payload.md) {
     const md = renderMd(payload.md);
     if (ctx.flags.explain) {
       // AI frontmatter: machine-readable hint at top of markdown
@@ -136,12 +157,15 @@ export function emitResult<T>(ctx: OutputContext, payload: ResultPayload<T>): vo
     return;
   }
   process.stdout.write(
-    `## ${payload.command}\n\n\`\`\`json\n${JSON.stringify(payload.data, null, 2)}\n\`\`\`\n`
+    renderMd({
+      heading: payload.command,
+      data: `\`\`\`json\n${JSON.stringify(payload.data, null, 2)}\n\`\`\``,
+    })
   );
 }
 
 export function emitError(ctx: OutputContext | null, command: string, err: unknown): number {
-  const fmt = ctx?.flags.output ?? 'markdown';
+  const fmt = ctx?.flags.output ?? 'human';
   let code = 'UNKNOWN_ERROR';
   let message = err instanceof Error ? err.message : String(err);
   let hint: string | undefined;
@@ -187,6 +211,21 @@ export function emitError(ctx: OutputContext | null, command: string, err: unkno
     if (hint) process.stderr.write(`提示: ${hint}\n`);
     return exitCode;
   }
+  if (fmt === 'human') {
+    process.stderr.write(
+      renderHumanError({
+        command,
+        code,
+        message,
+        hint,
+        doc,
+        details: ctx?.flags.verbose ? details : undefined,
+        detailsOmitted: details !== undefined && !ctx?.flags.verbose,
+        exitCode,
+      })
+    );
+    return exitCode;
+  }
   process.stdout.write(
     renderMd({
       heading: `${command} · ✗ 失败`,
@@ -205,7 +244,8 @@ export function emitDiagnostic(
 ): void {
   if (ctx?.flags.quiet) return;
   const prefix = level === 'warn' ? '[warn] ' : '';
-  process.stderr.write(`${prefix}${message}\n`);
+  const rendered = ctx?.flags.output === 'human' ? stripInlineMarkdown(message) : message;
+  process.stderr.write(`${prefix}${rendered}\n`);
 }
 
 export interface StreamEmitter {
@@ -233,6 +273,8 @@ export function startStream(ctx: OutputContext, command: string): StreamEmitter 
         process.stdout.write(
           `### ${eventType}\n\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n\n`
         );
+      } else if (fmt === 'human') {
+        process.stdout.write(renderHumanStreamEvent(eventType, payload));
       } else {
         writeStdout(JSON.stringify(payload));
       }

@@ -519,7 +519,9 @@ async function handleProviderRemove(args: string[], flags: GlobalFlags): Promise
 }
 
 async function handleProviderModel(args: string[], flags: GlobalFlags): Promise<number> {
-  const [action, provider, model, ...flagArgs] = args;
+  const [action, provider, ...remainingArgs] = args;
+  const model = action === 'list' ? undefined : remainingArgs[0];
+  const flagArgs = action === 'list' ? remainingArgs : remainingArgs.slice(1);
   if (!action)
     throw new CliError('USAGE_ERROR', '用法: config provider model <list|add|set|remove> ...');
   if (!provider) throw new CliError('USAGE_ERROR', 'provider 必填');
@@ -1117,7 +1119,7 @@ export async function cmdConfig(args: string[], flags: GlobalFlags): Promise<num
     return await dispatchConfig(group, rest, flags);
   } catch (err) {
     const { emitError, createOutputContext } = await import('./output');
-    // 透传用户的 --output 选择，避免 USAGE 错误强制 Markdown
+    // 透传用户的 --output 选择，避免 USAGE 错误退回默认 human 格式。
     return emitError(createOutputContext(flags), `config${group ? `.${group}` : ''}`, err);
   }
 }

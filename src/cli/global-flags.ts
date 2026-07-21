@@ -1,6 +1,6 @@
 import { CliError } from './errors';
 
-export type OutputFormat = 'markdown' | 'json' | 'ndjson' | 'text';
+export type OutputFormat = 'human' | 'json' | 'ndjson' | 'text' | 'markdown';
 
 export interface GlobalFlags {
   output: OutputFormat;
@@ -15,12 +15,13 @@ export interface GlobalFlags {
   target?: { url?: string; host?: string; port?: number };
 }
 
-const VALID_OUTPUTS: OutputFormat[] = ['markdown', 'json', 'ndjson', 'text'];
+const VALID_OUTPUTS: OutputFormat[] = ['human', 'json', 'ndjson', 'text', 'markdown'];
 
 function pickOutput(raw: string | undefined): OutputFormat | undefined {
   if (!raw) return undefined;
   const normalized = raw.toLowerCase();
   if (normalized === 'md') return 'markdown';
+  if (normalized === 'table' || normalized === 'terminal') return 'human';
   return VALID_OUTPUTS.includes(normalized as OutputFormat)
     ? (normalized as OutputFormat)
     : undefined;
@@ -56,7 +57,7 @@ export function extractGlobalFlags(args: string[]): { flags: GlobalFlags; rest: 
       const next = args[++i];
       if (next === undefined) {
         throw new CliError('USAGE_ERROR', `${a} 需要参数`, {
-          hint: '可选值: markdown | json | ndjson | text',
+          hint: '可选值: human | json | ndjson | text | markdown',
         });
       }
       outputFlag = next;
@@ -123,12 +124,12 @@ export function extractGlobalFlags(args: string[]): { flags: GlobalFlags; rest: 
     const picked = pickOutput(outputFlag);
     if (!picked) {
       throw new CliError('USAGE_ERROR', `无效的 --output 值: ${outputFlag}`, {
-        hint: '可选值: markdown | json | ndjson | text',
+        hint: '可选值: human | json | ndjson | text | markdown',
       });
     }
     output = picked;
   } else {
-    output = envFormat ?? 'markdown';
+    output = envFormat ?? 'human';
   }
 
   let targetPort: number | undefined;
@@ -161,7 +162,7 @@ export function extractGlobalFlags(args: string[]): { flags: GlobalFlags; rest: 
 }
 
 export const DEFAULT_FLAGS: GlobalFlags = {
-  output: 'markdown',
+  output: 'human',
   quiet: false,
   verbose: false,
   noColor: false,

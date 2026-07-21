@@ -236,7 +236,12 @@ defineSchemaCommand<EnvFlags>({
     } else {
       script = entries.map((e) => `export ${e.key}=${JSON.stringify(e.value)}`).join('\n');
     }
-    if (values.export && (ctx.flags.output === 'text' || ctx.flags.output === 'markdown')) {
+    if (
+      values.export &&
+      (ctx.flags.output === 'human' ||
+        ctx.flags.output === 'text' ||
+        ctx.flags.output === 'markdown')
+    ) {
       process.stdout.write(`${script}\n`);
       return;
     }

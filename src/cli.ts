@@ -51,12 +51,12 @@ async function printHelpFallback(flags: GlobalFlags): Promise<number> {
         })),
         md: {
           heading: 'local-router · 命令清单',
-          meta: ['默认输出 Markdown · `-o json` 切换 envelope · `-o text` 兜底'],
+          meta: ['默认输出终端友好格式 · `-o json` 切换 envelope · `-o text` 兼容旧脚本'],
           data: renderTable(['命令', '说明', '改写?', '需运行?'], rows),
           hints: [
             '查看命令详情: `local-router help <cmd>`',
             '机器格式: `local-router commands --json`',
-            '全局 flags: `-o markdown|json|ndjson|text` `--quiet` `--verbose` `--no-color` `--no-interactive` `--yes` `--config` `--timeout`',
+            '全局 flags: `-o human|json|ndjson|text|markdown` `--quiet` `--verbose` `--no-color` `--no-interactive` `--yes` `--config` `--timeout`',
           ],
         },
         text: [

@@ -104,14 +104,14 @@ local-router version
 - `--daemon`：后台运行
 - `--idle-timeout <sec>`：设置 Bun 连接空闲超时（默认 600 秒，设为 `0` 可关闭）
 
-## AI 友好化（Markdown-first CLI）
+## CLI 输出格式
 
-local-router 的 CLI 默认输出**结构化 Markdown**（标题 / 表格 / 代码块 / 提示），让 Claude Code、Cursor 等 AI agent 不用额外解析就能消费；脚本场景用 `-o json` 切到 envelope，`-o text` 兜底到旧文案。
+local-router 默认采用常见 CLI 的人类可读输出：空格对齐的表格、键值信息和普通文本，不会把 Markdown 标记直接打印到终端。脚本场景用 `-o json` 获取稳定 envelope；需要生成文档时仍可显式使用 `-o markdown`。
 
 ### 全局 flags
 
 ```
--o, --output markdown|json|ndjson|text   默认 markdown；env LOCAL_ROUTER_FORMAT
+-o, --output human|json|ndjson|text|markdown   默认 human；env LOCAL_ROUTER_FORMAT
 --json                                    -o json 别名
 -q, --quiet
 -v, --verbose
@@ -124,9 +124,11 @@ LOCAL_ROUTER_RUNTIME_DIR=<dir>            隔离 daemon 状态目录（CI / 测�
 
 ### 输出契约
 
-- **Markdown（默认）**：顶部 `## <command>` 标题 + blockquote meta + `### 数据`/`### 错误`/`### 提示` 子段，命令一旦发布 schema 即视为契约。
+- **Human（默认）**：面向终端的对齐表格、键值信息和普通文本；错误写入 stderr，不包含 Markdown 标记，`--verbose` 可展开结构化错误详情。
 - **JSON**：成功 `{ ok:true, command, schema_version, data, meta }`；失败 `{ ok:false, error:{code,message,hint,doc,details}, exit_code }`。
 - **NDJSON**：流式命令每行一个 `{ type:"event"|"end"|"error", ... }`。
+- **Text**：保留旧版紧凑文案，供已有脚本兼容使用。
+- **Markdown**：显式导出结构化 Markdown，适合文档或 AI 上下文文件，不作为默认终端输出。
 - **退出码**：`0` ok / `2` 用法 / `3` 未运行 / `4` 状态冲突 / `5` 校验失败 / `6` 资源不存在 / `7` 超时 / `8` 健康失败 / `9` 上游不可达 / `10` 需要交互。
 
 ### 自描述与引导命令（给 AI 的入口）
@@ -185,7 +187,7 @@ local-router logs export --format jsonl --window 24h > out.jsonl
 
 ### 兼容回退
 
-旧脚本若硬编码旧文案，加 `--output text` 或 `LOCAL_ROUTER_FORMAT=text` 完整还原行为。`--json` 现在是 envelope 形式（`.data` 取数据），相比 v0.4 是 breaking change。
+旧脚本若硬编码旧文案，加 `--output text` 或 `LOCAL_ROUTER_FORMAT=text` 完整还原行为。曾依赖默认 Markdown 的调用方改用 `--output markdown`；`--json` 是 envelope 形式，通过 `.data` 取业务数据。
 
 ## 请求入口（给你的应用调用）
 

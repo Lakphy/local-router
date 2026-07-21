@@ -9,7 +9,7 @@
 
 - **Spec-first 引擎**：`defineCommand({flags})` 作为单一真相源，自动生成 parser/help/校验/补全/schema。
 - **闭环命令**：补齐 LAN 设置、插件管理、chat 直连、tokens/cost、prune、export 等 Web 独占能力。
-- **AI 友好**：默认 Markdown + 内嵌 `<!-- json -->` frontmatter；envelope v2 加 `next` / `correlation_id`；新增 `recipes`、`examples`、`why`、`--explain` 全局 flag。
+- **输出友好**：默认 human 终端格式；显式 Markdown 可内嵌 `<!-- json -->` frontmatter；envelope v2 加 `next` / `correlation_id`。
 - **零摩擦**：shell 补全、did-you-mean、短别名、`config edit`、`open` 工具。
 - **可观测**：所有命令 contract 测试 + golden snapshot；命令 schema 一旦发布即视为契约。
 
@@ -22,7 +22,7 @@
 | 模块 | 文件 | 现状 |
 |---|---|---|
 | 命令注册中心 | `src/cli/registry.ts` | 树状 matchCommand + ordered 列表 |
-| 4 种输出格式 | `src/cli/output.ts` | markdown / json / ndjson / text + envelope schema + 退出码 |
+| 5 种输出格式 | `src/cli/output.ts` | human / json / ndjson / text / markdown + envelope schema + 退出码 |
 | 全局 flag | `src/cli/global-flags.ts` | env fallback 完备，`--json` 别名 |
 | AI cheatsheet | `agents-md` | 一站式 Markdown 导出 |
 | 命令域 | 31 个 | lifecycle / config / logs / diagnose 4 大域 |
@@ -51,7 +51,7 @@
 5. **stdin / 管道**：`config patch`/`import` 支持 stdin，`config provider add` 不支持 `.env` 或 JSON 片段。
 6. **shell 补全**：完全没有 `completion bash|zsh|fish`。
 7. **状态心智**：`status` 与 `logs metrics` 各自要 fetch；缺一站式 summary。
-8. **AI 友好性**：默认 Markdown 已较好；但 meta 没有 `correlation_id` / `next` 建议命令；`agents-md` 静态生成，无 `--include schemas` 模块化。
+8. **AI 友好性**：JSON/Markdown 可提供 `correlation_id` / `next` 建议命令；`agents-md` 支持生成专用上下文文档。
 9. **交互模型**：仅 `route set` 有 readline，体验粗糙，没有箭头键 / 模糊过滤。
 10. **可发现性**：缺 `examples`、`recipes <task>`、`why <error-code>` 这类 AI 友好命令。
 
@@ -61,7 +61,7 @@
 
 1. **闭环**：Web 能做的 CLI 都能做；CLI 操作都有结构化输出。
 2. **声明 = 实现**：`defineCommand({flags})` 单一真相源，运行时生成 parser / help / 校验 / 补全 / JSON schema。
-3. **Markdown-first，machine-second**：默认 Markdown 直读；`-o json` 全字段稳定 schema、版本化。
+3. **Human-first，machine-stable**：默认采用终端友好输出；`-o json` 提供全字段稳定、版本化 schema；`-o markdown` 显式生成文档。
 4. **零摩擦发现**：从 0 到完成任务最多 3 个命令（`doctor` → `examples` → 执行）。
 
 ---
@@ -213,7 +213,7 @@ local-router
 
 **5.2 Markdown 内嵌结构化 frontmatter**
 
-默认 Markdown 输出顶部加 HTML 注释 `<!-- json: {"ok":true,"command":"…"} -->`，AI 同时拿到人类可读和机器可读，无需跑两遍。
+显式 `--output markdown --explain` 时在顶部加 HTML 注释 `<!-- json: {"ok":true,"command":"…"} -->`，AI 同时拿到人类可读和机器可读，无需跑两遍；默认 human 输出不包含 HTML/Markdown 标记。
 
 **5.3 `recipes` 任务库**
 
@@ -236,7 +236,7 @@ local-router agents-md --emit-to AGENTS.md        # 直接落盘
 
 **5.5 `--explain` 全局 flag**
 
-任何命令加 `--explain` 不执行，只输出"这条命令会做什么、会改哪些文件、需要什么前置条件"的 Markdown。AI 拿不准时可先 `--explain` 预览。
+任何命令加 `--explain` 可放大说明与后续建议；需要 Markdown + JSON frontmatter 时显式组合 `--explain --output markdown`。
 
 ### PR-6 · 交互体验现代化
 

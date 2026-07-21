@@ -9,6 +9,7 @@ import { renderCodeBlock, renderTable } from '../render-md';
 
 const PROVIDER_TYPES = ['openai-completions', 'openai-responses', 'anthropic-messages'] as const;
 const FEATURES = [
+  'human',
   'markdown',
   'json',
   'ndjson',
@@ -337,14 +338,15 @@ defineSchemaCommand<AgentsMdFlags>({
         `# local-router · AGENTS.md`,
         ``,
         `> 生成时间: ${new Date().toISOString()} · 版本: ${version}`,
-        `> 此文档专为 AI agent 编写。所有命令默认输出 Markdown，可加 \`--output json\` 获得 envelope。`,
+        `> 此文档专为 AI agent 编写。所有命令默认输出终端友好格式，可加 \`--output json\` 获得 envelope。`,
         ``,
         `## 输出契约`,
         ``,
-        `- 默认: 结构化 Markdown，顶部 \`## <command>\` 标题、blockquote meta、\`### 数据\`、\`### 提示\`。`,
+        `- 默认（\`--output human\`）: 面向终端的对齐表格、键值信息和普通文本，不含 Markdown 标记；\`--verbose\` 可展开错误详情。`,
         `- \`--output json\`: \`{ ok, command, schema_version, data, meta }\`；错误为 \`{ ok:false, error:{code,message,hint,doc,details}, exit_code }\`。`,
         `- \`--output ndjson\`: 流式命令每行一个事件 (\`type:"event"|"end"|"error"\`)。`,
         `- \`--output text\`: 旧字符串文案，零破坏兼容。`,
+        `- \`--output markdown\`: 显式导出 Markdown 文档源码。`,
         `- env: \`LOCAL_ROUTER_FORMAT=json\` 全局切换。`,
         ``,
         `## 退出码`,
@@ -456,7 +458,7 @@ defineSchemaCommand<AgentsMdFlags>({
         `- \`local-router capabilities --json\`: 版本 + provider 类型 + 特性`,
         `- \`local-router recipes [<task>]\`: 任务剧本库`,
         `- \`local-router why <code>\`: 错误码助记`,
-        `- \`local-router <cmd> --explain\`: Markdown + JSON frontmatter（注意: data 段含命令完整输出，密钥已由各 handler 默认 mask，但使用 --show-secrets 时可能明文）`,
+        `- \`local-router <cmd> --explain --output markdown\`: Markdown + JSON frontmatter（注意: data 段含命令完整输出，密钥已由各 handler 默认 mask，但使用 --show-secrets 时可能明文）`,
         ``,
       ].join('\n')
     );

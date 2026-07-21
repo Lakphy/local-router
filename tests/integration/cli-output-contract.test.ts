@@ -99,15 +99,34 @@ describe('CLI output contract', () => {
     }
   });
 
-  test('default output is Markdown with stable heading', () => {
+  test('default output is terminal-friendly human text, not Markdown source', () => {
     const { dir, configPath, runtimeDir } = withTempConfig();
     try {
       const r = runCli(['config', 'provider', 'list', '--config', configPath], {
         LOCAL_ROUTER_RUNTIME_DIR: runtimeDir,
       });
       expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/^config\.provider\.list/);
+      expect(r.stdout).toContain('NAME  TYPE');
+      expect(r.stdout).toContain('p1    openai-completions');
+      expect(r.stdout).not.toMatch(/^#{1,6}\s/m);
+      expect(r.stdout).not.toContain('```');
+      expect(r.stdout).not.toContain('| ---');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(runtimeDir, { recursive: true, force: true });
+    }
+  });
+
+  test('--output markdown remains an explicit document export format', () => {
+    const { dir, configPath, runtimeDir } = withTempConfig();
+    try {
+      const r = runCli(
+        ['config', 'provider', 'list', '--config', configPath, '--output', 'markdown'],
+        { LOCAL_ROUTER_RUNTIME_DIR: runtimeDir }
+      );
+      expect(r.exitCode).toBe(0);
       expect(r.stdout).toMatch(/^## config\.provider\.list/);
-      expect(r.stdout).toContain('### 数据');
       expect(r.stdout).toContain('| name | type | base | models | proxy |');
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -326,8 +345,8 @@ describe('CLI output contract', () => {
     expect(env.correlation_id).toBeUndefined();
   });
 
-  test('--explain markdown emits json frontmatter comment', () => {
-    const { stdout, exitCode } = runCli(['version', '--explain']);
+  test('--explain with explicit markdown emits json frontmatter comment', () => {
+    const { stdout, exitCode } = runCli(['version', '--explain', '--output', 'markdown']);
     expect(exitCode).toBe(0);
     expect(stdout.startsWith('<!-- json:')).toBe(true);
     const match = stdout.match(/<!-- json:\n([\s\S]*?)\n-->/);
@@ -335,6 +354,26 @@ describe('CLI output contract', () => {
     const env = JSON.parse(match![1]) as { ok: boolean; schema_version: number };
     expect(env.ok).toBe(true);
     expect(env.schema_version).toBe(2);
+  });
+
+  test('default human errors use stderr and contain no Markdown source', () => {
+    const { stdout, stderr, exitCode } = runCli(['definitely-not-a-cmd']);
+    expect(exitCode).toBe(2);
+    expect(stdout).toBe('');
+    expect(stderr).toContain('错误: 未知命令: definitely-not-a-cmd');
+    expect(stderr).toContain('错误码: USAGE_ERROR (exit 2)');
+    expect(stderr).toContain('详情: 使用 --verbose 查看');
+    expect(stderr).not.toContain('available:');
+    expect(stderr).not.toMatch(/^#{1,6}\s|```|`/m);
+  });
+
+  test('--verbose expands structured details for human errors', () => {
+    const { stdout, stderr, exitCode } = runCli(['definitely-not-a-cmd', '--verbose']);
+    expect(exitCode).toBe(2);
+    expect(stdout).toBe('');
+    expect(stderr).toContain('详情:');
+    expect(stderr).toContain('available:');
+    expect(stderr).toContain('- commands');
   });
 
   test('recipes lists known names', () => {
@@ -373,10 +412,9 @@ describe('CLI output contract', () => {
   });
 
   test('LOCAL_ROUTER_CORRELATION_ID env is passed through verbatim', () => {
-    const { stdout, exitCode } = runCli(
-      ['version', '--output', 'json'],
-      { LOCAL_ROUTER_CORRELATION_ID: 'test-fixed-abc' }
-    );
+    const { stdout, exitCode } = runCli(['version', '--output', 'json'], {
+      LOCAL_ROUTER_CORRELATION_ID: 'test-fixed-abc',
+    });
     expect(exitCode).toBe(0);
     const env = JSON.parse(stdout) as { correlation_id?: string };
     expect(env.correlation_id).toBe('test-fixed-abc');
@@ -389,15 +427,30 @@ describe('CLI output contract', () => {
       configPath,
       JSON.stringify({
         providers: {
-          demo: { type: 'openai-completions', base: 'http://x', apiKey: 'k', models: [{ name: 'a' }] },
+          demo: {
+            type: 'openai-completions',
+            base: 'http://x',
+            apiKey: 'k',
+            models: [{ name: 'a' }],
+          },
         },
         routes: {},
       })
     );
     try {
       const { stdout, exitCode } = runCli([
-        'config', 'provider', 'plugin', 'add', 'demo', 'some-pkg',
-        '--index', '-1', '--config', configPath, '--output', 'json',
+        'config',
+        'provider',
+        'plugin',
+        'add',
+        'demo',
+        'some-pkg',
+        '--index',
+        '-1',
+        '--config',
+        configPath,
+        '--output',
+        'json',
       ]);
       expect(exitCode).toBe(2);
       const env = JSON.parse(stdout) as { ok: boolean; error: { code: string } };
